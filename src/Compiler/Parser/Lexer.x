@@ -1,10 +1,12 @@
 {
-module Compiler.Parser.Lexer (alexMonadScan, runAlex, Alex, alexEOF, Token (..), Literal (..), Identifier) where
+module Compiler.Parser.Lexer (alexMonadScan, runAlex, alexEOF, Alex, AlexUserState(..)) where
 import qualified Data.Text as T
 import qualified Data.List as L
 import qualified Data.Map as M
 import Data.Maybe
--- import Compiler.Parser.Monad
+import Data.Functor
+
+import Compiler.AST 
 }
 
 %wrapper "monadUserState-strict-text"
@@ -90,104 +92,12 @@ tokens :-
     ","                     { \(_,_,_,s) _ -> pure $ Comma  }
     "."                     { \(_,_,_,s) _ -> pure $ Dot    }
     ":"                     { \(_,_,_,s) _ -> pure $ Colon  }
-    $nondigit $identcont*   { \(_,_,_,t) _ -> alexGetUserState <&> (\(AlexUserState (symtblLst:_)) -> if isJust (lookup t symtblLst) then TTypeName t else Ident t) }
+    $nondigit $identcont*   { \(_,_,_,t) _ -> alexGetUserState <&> (\(AlexUserState (symtbl:_)) -> if isJust (M.lookup t symtbl) then TTypeName t else Ident t) }
     $nzdigit $digit*        { \(_,_,_,s) _ -> pure $ Lit (LNum s)}
     \" @schar \"            { \(_,_,_,s) _ -> pure $ Lit (LString s)}
     \' $printable \'        { \(_,_,_,s) _ -> pure $ Lit (LChar s)}
     $white+;
 {
-
-type Identifier = T.Text
-
-data Literal =
-    LString T.Text
-  | LChar   T.Text
-  | LNum    T.Text
-  | LFloat  T.Text
-  deriving (Eq, Show)
-
-data Token = 
-    -- keywords
-      Ident Identifier --T.Text
-    | TTypeName Identifier
-    | Lit Literal
-
-    -- keywords
-    | Break
-    | Case
-    | While
-    | For
-    | Else
-    | Goto
-    | If
-    | Return
-    | Sizeof
-    | Struct
-    | Enum
-    | Switch
-    | Union
-    | Void
-    | Static
-    | Inline
-    | Extern
-    | Default
-    | Do
-    | Continue
-
-    -- operations
-    | LBrace
-    | RBrace
-    | LParen
-    | RParen
-    | LBrack
-    | RBrack
-    | Semi
-    | Colon
-    | Assign
-    | Comma
-    | Dot
-    | Arrow
-    | Const
-
-    -- 
-    | BitAnd
-    | BitOr
-    | BitXor
-    | Compliment
-    | LShift
-    | RShift
-
-    -- arith
-    | Times
-    | Plus
-    | Minus
-    | Not
-    | Divide
-    | Modulo
-
-    -- comparison
-    | Lt
-    | Le
-    | Gt
-    | Ge
-    | Eq
-    | Neq
-    | LAnd
-    | LOr
-    | TChar
-    | TShort
-    | TInt
-    | TLong
-    | TFloat
-    | TDouble
-    | TSigned
-    | TUnsigned
-    | TuBool
-    | TuComplex
-    | TuImaginary
-    | EOF
-    deriving (Eq, Show)
-
 alexEOF :: Alex Token
 alexEOF = pure EOF
 
@@ -195,6 +105,4 @@ data AlexUserState = AlexUserState [M.Map T.Text ()]
 
 alexInitUserState :: AlexUserState
 alexInitUserState = AlexUserState [M.empty]
-
-
 }

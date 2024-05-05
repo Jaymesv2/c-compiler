@@ -1,6 +1,97 @@
 module Compiler.AST where
 
-import Compiler.Parser.Lexer (Identifier, Literal)
+import qualified Data.Text as T
+
+type Identifier = T.Text
+
+data Literal =
+    LString T.Text
+  | LChar   T.Text
+  | LNum    T.Text
+  | LFloat  T.Text
+  deriving (Eq, Show)
+
+data Token = 
+    -- keywords
+      Ident Identifier --T.Text
+    | TTypeName Identifier
+    | Lit Literal
+
+    -- keywords
+    | Break
+    | Case
+    | While
+    | For
+    | Else
+    | Goto
+    | If
+    | Return
+    | Sizeof
+    | Struct
+    | Enum
+    | Switch
+    | Union
+    | Void
+    | Static
+    | Inline
+    | Extern
+    | Default
+    | Do
+    | Continue
+
+    -- operations
+    | LBrace
+    | RBrace
+    | LParen
+    | RParen
+    | LBrack
+    | RBrack
+    | Semi
+    | Colon
+    | Assign
+    | Comma
+    | Dot
+    | Arrow
+    | Const
+
+    -- 
+    | BitAnd
+    | BitOr
+    | BitXor
+    | Compliment
+    | LShift
+    | RShift
+
+    -- arith
+    | Times
+    | Plus
+    | Minus
+    | Not
+    | Divide
+    | Modulo
+
+    -- comparison
+    | Lt
+    | Le
+    | Gt
+    | Ge
+    | Eq
+    | Neq
+    | LAnd
+    | LOr
+    | TChar
+    | TShort
+    | TInt
+    | TLong
+    | TFloat
+    | TDouble
+    | TSigned
+    | TUnsigned
+    | TuBool
+    | TuComplex
+    | TuImaginary
+    | EOF
+    deriving (Eq, Show)
 
 -- page
 data UnaryOp = URef | UDeref | UCompliment | UNot | USizeof
