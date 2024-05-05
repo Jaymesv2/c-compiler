@@ -14,14 +14,29 @@ main = do
   --      \   return ( y - x + 5 ); \
   --      \ } \
   --      \ "
-  -- let x = "int main(int argc) { println(\"hello world\\n\"); }"
   -- let x = "int i;" -- works
-  let x = "struct x {};"
+  -- let x = "struct x {};"
 
-  -- let x = "i32 test_fn() {}"
-
+  --let x = "int func(int i) { int i; }"
+  {-
+  let plist = "int i"
+  let tokens = alexScanTokens plist
+  let tree = parameterList tokens
+  -}
+  {-
+  let decl = "i()"
+  let tokens = alexScanTokens decl
+  let tree = directDeclarator tokens
+  -}
+  let x = "int main(int argc, char** argv) { println(\"hello world\\n\"); }"
   let tokens = alexScanTokens x
-  let tree = clike tokens
+  --let tree = clike tokens
+  tree <- clike tokens
+
+  
   print $ tree
+ where
+  t1 = do
+    print "hi"
 
 -- For withUtf8, see https://serokell.io/blog/haskell-with-utf8

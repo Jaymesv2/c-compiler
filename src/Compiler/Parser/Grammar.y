@@ -9,8 +9,10 @@ import Compiler.AST
 
 --parseError :: [Token] -> a
 --parseError _ = error "Parse error"
-
 }
+
+--%monad { E } { thenE } { returnE }
+%monad { IO }
 
 %name clike
 %tokentype { Token }
@@ -85,6 +87,34 @@ import Compiler.AST
     ','     { Comma  }
     '.'     { Dot }
     ':'     { Colon}
+
+
+%name expr Expr
+%name declaration Declaration
+
+%name declarator Declarator
+%name directDeclarator DirectDeclarator
+%name directAbstractDeclarator DirectAbstractDeclarator
+%name abstractDeclarator AbstractDeclarator
+
+%name typeSpecifier TypeSpecifier
+%name typeQualifier TypeQualifier
+%name structOrUnionSpecifier StructOrUnionSpecifier
+
+%name externalDeclaration ExternalDeclaration
+%name functionDefinition FunctionDefinition
+%name translationUnit TranslationUnit
+
+%name parameterDeclaration ParameterDeclaration
+%name parameterList ParameterList
+%name identifierList IdentifierList
+
+
+%name statement Statement
+%name compoundStatement CompoundStatement
+%name blockItem BlockItem
+%name selectionStatement SelectionStatement
+%name iterationStatement IterationStatement
 
 
 %%
@@ -199,7 +229,6 @@ Declaration : DeclarationSpecifiers InitDeclarationList ';' { (Declaration ($1 :
 
 -- Declarations 
 
-
 DeclarationSpecifiers   : StorageClassSpecifier DeclarationSpecifiers   { (DSStorageSpec $1 $2     ) :: DeclarationSpecifiers }
                         | StorageClassSpecifier                         { (DSStorageSpec $1 DSNil  ) :: DeclarationSpecifiers }
                         | TypeSpecifier DeclarationSpecifiers           { (DSTypeSpec $1 $2        ) :: DeclarationSpecifiers }
@@ -240,7 +269,7 @@ TypeSpecifier  : void           { PrimType PVoid }
                 | uImaginary    { PrimType PuImaginary }
                 | StructOrUnionSpecifier    {StructType $1 }
                 | EnumSpecifier              {EnumType $1 }
-                | TypedefName       { IdentType $1 }
+                -- | TypedefName       { IdentType $1 }
 -- page 108
 TypeQualifier   : const         { TQConst }
                 -- | restrict  {}
@@ -306,9 +335,10 @@ EnumerationConstant : ident { $1 }
 
 
 -- Page 114
-
 Declarator  : Pointer DirectDeclarator      { Declarator (Just $1) $2 }
             | DirectDeclarator              { Declarator Nothing $1 }
+
+
 
 
 -- revisit these rules, (wtf is the _opt_ supposed to do???).
@@ -441,14 +471,38 @@ JumpStatement       : goto ident ';'        { GotoStmt $2 }
 -- page 140
 
 
+
+
+DeclarationList     : Declaration                   { [ $1 ] }
+                    | DeclarationList  Declaration { $2 : $1 }
+
 ExternalDeclaration : FunctionDefinition    {(FunctionDef $1) :: ExternDecl }
                     | Declaration           {(EDecl $1) :: ExternDecl   }
 
 FunctionDefinition  : DeclarationSpecifiers Declarator DeclarationList CompoundStatement {FunctionDefinition $1 $2 (Just (reverse $3)) $4}
                     | DeclarationSpecifiers Declarator CompoundStatement    {FunctionDefinition $1 $2 Nothing $3}
 
-DeclarationList     : Declaration                   { [ $1 ] }
-                    | DeclarationList  Declaration { $2 : $1 }
-
 -- page 145
 -- PREPROCESSING
+{-
+
+data E a = Ok a | Failed String
+
+thenE :: E a -> (a -> E b) -> E b
+m `thenE` k =
+   case m of
+       Ok a     -> k a
+       Failed e -> Failed e
+
+returnE :: a -> E a
+returnE a = Ok a
+
+failE :: String -> E a
+failE err = Failed err
+
+catchE :: E a -> (String -> E a) -> E a
+catchE m k =
+   case m of
+      Ok a     -> Ok a
+      Failed e -> k e
+-}
