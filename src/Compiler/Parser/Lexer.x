@@ -28,74 +28,80 @@ $identcont = [ $digit $nondigit ]
 --    hex literals
 --    octal literals
 tokens :-
-    break                   { \(_,_,_,s) _ -> pure $ Break }
-    case                    { \(_,_,_,s) _ -> pure $ Case }
-    while                   { \(_,_,_,s) _ -> pure $ While}
-    for                     { \(_,_,_,s) _ -> pure $ For }
-    else                    { \(_,_,_,s) _ -> pure $ Else }
-    goto                    { \(_,_,_,s) _ -> pure $ Goto}
-    if                      { \(_,_,_,s) _ -> pure $ If }
-    return                  { \(_,_,_,s) _ -> pure $ Return }
-    sizeof                  { \(_,_,_,s) _ -> pure $ Sizeof}
-    struct                  { \(_,_,_,s) _ -> pure $ Struct}
-    switch                  { \(_,_,_,s) _ -> pure $ Switch }
-    union                   { \(_,_,_,s) _ -> pure $ Union }
-    void                    { \(_,_,_,s) _ -> pure $ Void }
-    static                  { \(_,_,_,s) _ -> pure $ Static }
-    inline                  { \(_,_,_,s) _ -> pure $ Inline }
-    extern                  { \(_,_,_,s) _ -> pure $ Extern }
-    enum                    { \(_,_,_,s) _ -> pure $ Enum }
-    const                   { \(_,_,_,s) _ -> pure $ Const }
-    default                 { \(_,_,_,s) _ -> pure $ Default }
-    do                      { \(_,_,_,s) _ -> pure $ Do }
-    continue                { \(_,_,_,s) _ -> pure $ Continue}
-    char                    { \(_,_,_,s) _ -> pure $ TChar}
-    short                   { \(_,_,_,s) _ -> pure $ TShort}
-    int                     { \(_,_,_,s) _ -> pure $ TInt}
-    long                    { \(_,_,_,s) _ -> pure $ TLong}
-    float                   { \(_,_,_,s) _ -> pure $ TFloat}
-    double                  { \(_,_,_,s) _ -> pure $ TDouble}
-    signed                  { \(_,_,_,s) _ -> pure $ TSigned}
-    unsigned                { \(_,_,_,s) _ -> pure $ TUnsigned}
-    _Bool                   { \(_,_,_,s) _ -> pure $ TuBool}
-    _Complex                { \(_,_,_,s) _ -> pure $ TuComplex}
-    _Imaginary              { \(_,_,_,s) _ -> pure $ TuImaginary}
-    "{"                     { \(_,_,_,s) _ -> pure $ LBrace }
-    "}"                     { \(_,_,_,s) _ -> pure $ RBrace }
-    "("                     { \(_,_,_,s) _ -> pure $ LParen }
-    ")"                     { \(_,_,_,s) _ -> pure $ RParen }
-    "["                     { \(_,_,_,s) _ -> pure $ LBrack }
-    "]"                     { \(_,_,_,s) _ -> pure $ RBrack }
-    "->"                    { \(_,_,_,s) _ -> pure $ Arrow  }
-    "&"                     { \(_,_,_,s) _ -> pure $ BitAnd }
-    "|"                     { \(_,_,_,s) _ -> pure $ BitOr   }
-    "*"                     { \(_,_,_,s) _ -> pure $ Times }
-    "+"                     { \(_,_,_,s) _ -> pure $ Plus }
-    "-"                     { \(_,_,_,s) _ -> pure $ Minus }
-    "~"                     { \(_,_,_,s) _ -> pure $ Compliment }
-    "!"                     { \(_,_,_,s) _ -> pure $ Not }
-    "/"                     { \(_,_,_,s) _ -> pure $ Divide }
-    "%"                     { \(_,_,_,s) _ -> pure $ Modulo }
-    "<<"                    { \(_,_,_,s) _ -> pure $ LShift } 
-    ">>"                    { \(_,_,_,s) _ -> pure $ RShift } 
-    "<"                     { \(_,_,_,s) _ -> pure $ Lt     }
-    "<="                    { \(_,_,_,s) _ -> pure $ Le     }
-    ">"                     { \(_,_,_,s) _ -> pure $ Gt     }
-    ">="                    { \(_,_,_,s) _ -> pure $ Ge     }
-    "=="                    { \(_,_,_,s) _ -> pure $ Eq     }
-    "!="                    { \(_,_,_,s) _ -> pure $ Neq    }
-    "^"                     { \(_,_,_,s) _ -> pure $ BitXor }
-    "&&"                    { \(_,_,_,s) _ -> pure $ LAnd   }
-    "||"                    { \(_,_,_,s) _ -> pure $ LOr    }
-    ";"                     { \(_,_,_,s) _ -> pure $ Semi   }
-    "="                     { \(_,_,_,s) _ -> pure $ Assign }
-    ","                     { \(_,_,_,s) _ -> pure $ Comma  }
-    "."                     { \(_,_,_,s) _ -> pure $ Dot    }
-    ":"                     { \(_,_,_,s) _ -> pure $ Colon  }
-    $nondigit $identcont*   { \(_,_,_,t) _ -> alexGetUserState <&> (\(AlexUserState (symtbl:_)) -> if isJust (M.lookup t symtbl) then TTypeName t else Ident t) }
-    $nzdigit $digit*        { \(_,_,_,s) _ -> pure $ Lit (LNum s)}
-    \" @schar \"            { \(_,_,_,s) _ -> pure $ Lit (LString s)}
-    \' $printable \'        { \(_,_,_,s) _ -> pure $ Lit (LChar s)}
+    auto                    { \(_,_,_,_) _ -> pure $ TypeDef }
+    break                   { \(_,_,_,_) _ -> pure $ Break }
+    case                    { \(_,_,_,_) _ -> pure $ Case }
+    const                   { \(_,_,_,_) _ -> pure $ Const }
+    continue                { \(_,_,_,_) _ -> pure $ Continue}
+    default                 { \(_,_,_,_) _ -> pure $ Default }
+    do                      { \(_,_,_,_) _ -> pure $ Do }
+    else                    { \(_,_,_,_) _ -> pure $ Else }
+    enum                    { \(_,_,_,_) _ -> pure $ Enum }
+    extern                  { \(_,_,_,_) _ -> pure $ Extern }
+    for                     { \(_,_,_,_) _ -> pure $ For }
+    goto                    { \(_,_,_,_) _ -> pure $ Goto}
+    if                      { \(_,_,_,_) _ -> pure $ If }
+    inline                  { \(_,_,_,_) _ -> pure $ Inline }
+    register                { \(_,_,_,_) _ -> pure $ Register }
+    restrict                { \(_,_,_,_) _ -> pure $ Restrict }
+    return                  { \(_,_,_,_) _ -> pure $ Return }
+    static                  { \(_,_,_,_) _ -> pure $ Static }
+    sizeof                  { \(_,_,_,_) _ -> pure $ Sizeof}
+    struct                  { \(_,_,_,_) _ -> pure $ Struct}
+    switch                  { \(_,_,_,_) _ -> pure $ Switch }
+    typedef                 { \(_,_,_,_) _ -> pure $ TypeDef }
+    union                   { \(_,_,_,_) _ -> pure $ Union }
+    volatile                { \(_,_,_,_) _ -> pure $ Volatile }
+    while                   { \(_,_,_,_) _ -> pure $ While}
+    
+    void                    { \(_,_,_,_) _ -> pure $ Void }
+    char                    { \(_,_,_,_) _ -> pure $ TChar}
+    short                   { \(_,_,_,_) _ -> pure $ TShort}
+    int                     { \(_,_,_,_) _ -> pure $ TInt}
+    long                    { \(_,_,_,_) _ -> pure $ TLong}
+    float                   { \(_,_,_,_) _ -> pure $ TFloat}
+    double                  { \(_,_,_,_) _ -> pure $ TDouble}
+    signed                  { \(_,_,_,_) _ -> pure $ TSigned}
+    unsigned                { \(_,_,_,_) _ -> pure $ TUnsigned}
+    _Bool                   { \(_,_,_,_) _ -> pure $ TuBool}
+    _Complex                { \(_,_,_,_) _ -> pure $ TuComplex}
+    _Imaginary              { \(_,_,_,_) _ -> pure $ TuImaginary}
+    "{"                     { \(_,_,_,_) _ -> pure $ LBrace }
+    "}"                     { \(_,_,_,_) _ -> pure $ RBrace }
+    "("                     { \(_,_,_,_) _ -> pure $ LParen }
+    ")"                     { \(_,_,_,_) _ -> pure $ RParen }
+    "["                     { \(_,_,_,_) _ -> pure $ LBrack }
+    "]"                     { \(_,_,_,_) _ -> pure $ RBrack }
+    "->"                    { \(_,_,_,_) _ -> pure $ Arrow  }
+    "&"                     { \(_,_,_,_) _ -> pure $ BitAnd }
+    "|"                     { \(_,_,_,_) _ -> pure $ BitOr   }
+    "*"                     { \(_,_,_,_) _ -> pure $ Times }
+    "+"                     { \(_,_,_,_) _ -> pure $ Plus }
+    "-"                     { \(_,_,_,_) _ -> pure $ Minus }
+    "~"                     { \(_,_,_,_) _ -> pure $ Compliment }
+    "!"                     { \(_,_,_,_) _ -> pure $ Not }
+    "/"                     { \(_,_,_,_) _ -> pure $ Divide }
+    "%"                     { \(_,_,_,_) _ -> pure $ Modulo }
+    "<<"                    { \(_,_,_,_) _ -> pure $ LShift } 
+    ">>"                    { \(_,_,_,_) _ -> pure $ RShift } 
+    "<"                     { \(_,_,_,_) _ -> pure $ Lt     }
+    "<="                    { \(_,_,_,_) _ -> pure $ Le     }
+    ">"                     { \(_,_,_,_) _ -> pure $ Gt     }
+    ">="                    { \(_,_,_,_) _ -> pure $ Ge     }
+    "=="                    { \(_,_,_,_) _ -> pure $ Eq     }
+    "!="                    { \(_,_,_,_) _ -> pure $ Neq    }
+    "^"                     { \(_,_,_,_) _ -> pure $ BitXor }
+    "&&"                    { \(_,_,_,_) _ -> pure $ LAnd   }
+    "||"                    { \(_,_,_,_) _ -> pure $ LOr    }
+    ";"                     { \(_,_,_,_) _ -> pure $ Semi   }
+    "="                     { \(_,_,_,_) _ -> pure $ Assign }
+    ","                     { \(_,_,_,_) _ -> pure $ Comma  }
+    "."                     { \(_,_,_,_) _ -> pure $ Dot    }
+    ":"                     { \(_,_,_,_) _ -> pure $ Colon  }
+    $nondigit $identcont*   { \(_,_,_,t) i -> alexGetUserState <&> (\(AlexUserState (symtbl:_)) -> if isJust (M.lookup t symtbl) then TTypeName (T.take i t) else Ident (T.take i t)) }
+    $nzdigit $digit*        { \(_,_,_,t) i -> pure $ Lit (LNum (T.take i t))}
+    \" @schar \"            { \(_,_,_,t) i -> pure $ Lit (LString (T.take i t))}
+    \' $printable \'        { \(_,_,_,t) i -> pure $ Lit (LChar (T.take i t))}
     $white+;
 {
 alexEOF :: Alex Token

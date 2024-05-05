@@ -10,34 +10,42 @@ import Compiler.AST
 
 %name clike
 %error {parseError}
-%monad {Alex}
+%monad {Alex} {>>=} {return }
 %lexer {(alexMonadScan >>=)} {EOF}
 %tokentype { Token }
 
 %token
     ident   { Ident $$ }
+    typeName{ TTypeName $$ }
     literal { Lit $$ }
+
+    auto    { Auto  }
     break   { Break }
     case    { Case }
     const   { Const }
-    while   { While}
-    for     { For }
-    else    { Else }
-    goto    { Goto}
-    if      { If }
-    return  { Return }
-    sizeof  { Sizeof}
-    struct  { Struct}
-    switch  { Switch }
-    union   { Union }
-    void    { Void }
-    static  { Static }
-    inline  { Inline }
-    extern  { Extern }
-    enum    { Enum }
+    continue{ Continue }
     default { Default }
     do      { Do }
-    continue{ Continue }
+    else    { Else }
+    extern  { Extern }
+    enum    { Enum }
+    for     { For }
+    goto    { Goto}
+    if      { If }
+    inline  { Inline }
+    register{ Register }
+    restrict{ Restrict }
+    return  { Return }
+    sizeof  { Sizeof}
+    static  { Static }
+    struct  { Struct}
+    switch  { Switch }
+    typedef { TypeDef }
+    union   { Union }
+    volatile{ Volatile}
+    while   { While}
+
+    void    { Void }
     char    {  TChar}
     short   {  TShort}
     int     {  TInt}
@@ -49,7 +57,6 @@ import Compiler.AST
     uBool   {  TuBool}
     uComplex {  TuComplex}
     uImaginary {  TuImaginary}
-    typeName{ TTypeName $$ }
     '{'     { LBrace }
     '}'     { RBrace }
     '('     { LParen }
@@ -85,31 +92,31 @@ import Compiler.AST
 
 
 %name expr Expr
-%name declaration Declaration
-
-%name declarator Declarator
-%name directDeclarator DirectDeclarator
-%name directAbstractDeclarator DirectAbstractDeclarator
-%name abstractDeclarator AbstractDeclarator
-
-%name typeSpecifier TypeSpecifier
-%name typeQualifier TypeQualifier
-%name structOrUnionSpecifier StructOrUnionSpecifier
-
-%name externalDeclaration ExternalDeclaration
-%name functionDefinition FunctionDefinition
-%name translationUnit TranslationUnit
-
-%name parameterDeclaration ParameterDeclaration
-%name parameterList ParameterList
-%name identifierList IdentifierList
-
-
-%name statement Statement
-%name compoundStatement CompoundStatement
-%name blockItem BlockItem
-%name selectionStatement SelectionStatement
-%name iterationStatement IterationStatement
+-- %name declaration Declaration
+-- 
+-- %name declarator Declarator
+-- %name directDeclarator DirectDeclarator
+-- %name directAbstractDeclarator DirectAbstractDeclarator
+-- %name abstractDeclarator AbstractDeclarator
+-- 
+-- %name typeSpecifier TypeSpecifier
+-- %name typeQualifier TypeQualifier
+-- %name structOrUnionSpecifier StructOrUnionSpecifier
+-- 
+-- %name externalDeclaration ExternalDeclaration
+-- %name functionDefinition FunctionDefinition
+-- %name translationUnit TranslationUnit
+-- 
+-- %name parameterDeclaration ParameterDeclaration
+-- %name parameterList ParameterList
+-- %name identifierList IdentifierList
+-- 
+-- 
+-- %name statement Statement
+-- %name compoundStatement CompoundStatement
+-- %name blockItem BlockItem
+-- %name selectionStatement SelectionStatement
+-- %name iterationStatement IterationStatement
 
 
 %%
@@ -117,13 +124,6 @@ import Compiler.AST
 TranslationUnit     : TranslationUnitI   {(reverse $1) :: TranslationUnit}
 TranslationUnitI    : ExternalDeclaration                    { [ $1 ] :: TranslationUnit }
                     | TranslationUnitI ExternalDeclaration   { ($2 : $1) :: TranslationUnit }
-
---Funct : ident ident '(' ')' '{' '}' { Funct $1 $2 }
-
--- maybe split string literals and constants
-
---TypeName    : ident     { $1 }
-
 
 PrimaryExpr : ident         { (EIdent $1) :: Expr }
             --| constant 
@@ -217,21 +217,22 @@ Expr    : AssignmentExpr { $1 }
 -- no increment, decrement, function calls, comma ops, unless they are in an unevaluated subexpression
 ConstExpr   : ConditionalExpr   { $1 }
 
-Declaration : DeclarationSpecifiers InitDeclarationList ';' { (Declaration ($1 :: DeclarationSpecifiers) (Just ((reverse $2) :: [InitDeclaration]))) :: Declaration }
-            | DeclarationSpecifiers ';'                     { (Declaration ($1 :: DeclarationSpecifiers) Nothing ) :: Declaration }
+Declaration : DeclarationSpecifiers InitDeclarationList ';' { (Declaration ($1 :: [DeclarationSpecifiers]) (Just ((reverse $2) :: [InitDeclaration]))) :: Declaration }
+            | DeclarationSpecifiers ';'                     { (Declaration ($1 :: [DeclarationSpecifiers]) Nothing ) :: Declaration }
 
 -- page 97
 
 -- Declarations 
 
-DeclarationSpecifiers   : StorageClassSpecifier DeclarationSpecifiers   { (DSStorageSpec $1 $2     ) :: DeclarationSpecifiers }
-                        | StorageClassSpecifier                         { (DSStorageSpec $1 DSNil  ) :: DeclarationSpecifiers }
-                        | TypeSpecifier DeclarationSpecifiers           { (DSTypeSpec $1 $2        ) :: DeclarationSpecifiers }
-                        | TypeSpecifier                                 { (DSTypeSpec $1 DSNil     ) :: DeclarationSpecifiers }
-                        | TypeQualifier DeclarationSpecifiers           { (DSTypeQual $1 $2        ) :: DeclarationSpecifiers }
-                        | TypeQualifier                                 { (DSTypeQual $1 DSNil     ) :: DeclarationSpecifiers }
-                        | FunctionSpecifier DeclarationSpecifiers       { (DSFuncSpec $1 $2        ) :: DeclarationSpecifiers }
-                        | FunctionSpecifier                             { (DSFuncSpec $1 DSNil     ) :: DeclarationSpecifiers }
+
+DeclarationSpecifiers   : StorageClassSpecifier DeclarationSpecifiers   { ((DSStorageSpec $1):$2) :: [DeclarationSpecifiers] }
+                        | StorageClassSpecifier                         { ([DSStorageSpec $1]   ) :: [DeclarationSpecifiers] }
+                        | TypeSpecifier DeclarationSpecifiers           { ((DSTypeSpec $1):$2   ) :: [DeclarationSpecifiers] }
+                        | TypeSpecifier                                 { ([DSTypeSpec $1]      ) :: [DeclarationSpecifiers] }
+                        | TypeQualifier DeclarationSpecifiers           { ((DSTypeQual $1):$2   ) :: [DeclarationSpecifiers] }
+                        | TypeQualifier                                 { ([DSTypeQual $1]      ) :: [DeclarationSpecifiers] }
+                        | FunctionSpecifier DeclarationSpecifiers       { ((DSFuncSpec $1):$2   ) :: [DeclarationSpecifiers] }
+                        | FunctionSpecifier                             { ([DSFuncSpec $1]      ) :: [DeclarationSpecifiers] }
 
 
 InitDeclarationList : InitDeclarator { [ $1 ] } 
@@ -242,11 +243,11 @@ InitDeclarator  : Declarator                    { UninitDeclaration $1 }
 
 
 -- page 98
-StorageClassSpecifier   --: typedef   { SCTypedef }
-                        : extern    { SCExtern }
+StorageClassSpecifier   : typedef   { SCTypedef }
+                        | extern    { SCExtern }
                         | static    { SCStatic }
-                        --| auto      { SCAuto }
-                        --| register  { SCRegister}
+                        | auto      { SCAuto }
+                        | register  { SCRegister}
 
     -- this needs to have the standard types and stuf
 -- page 99
@@ -267,8 +268,8 @@ TypeSpecifier  : void           { PrimType PVoid }
                 | TypedefName       { IdentType $1 }
 -- page 108
 TypeQualifier   : const         { TQConst }
-                -- | restrict  {}
-                -- | volatile  {}
+                | restrict      { TQRestrict }
+                | volatile      { TQVolatile }
 
 -- page 112
 FunctionSpecifier   : inline    { FSInline }
@@ -288,7 +289,7 @@ StructDeclarationList   : StructDeclaration                         { [ $1 ] :: 
 --StructDeclaration       : SpecifierQualifierList StructDeclarator { StructDeclaration $1 ([$2] :: [StructDeclarator]) }
 
 
-StructDeclaration       : SpecifierQualifierList StructDeclaratorList { StructDeclaration $1 (reverse $2 :: [StructDeclarator]) }
+StructDeclaration       : SpecifierQualifierList StructDeclaratorList ';' { StructDeclaration $1 (reverse $2 :: [StructDeclarator]) }
 
 StructDeclaratorList    : StructDeclarator                              { [ $1 ] :: [StructDeclarator] }
                         | StructDeclaratorList ',' StructDeclarator   { ($3 : $1) :: [StructDeclarator] }
@@ -330,43 +331,42 @@ EnumerationConstant : ident { $1 }
 Declarator  : Pointer DirectDeclarator      { Declarator (Just $1) $2 }
             | DirectDeclarator              { Declarator Nothing $1 }
 
-
--- revisit these rules, (wtf is the _opt_ supposed to do???).
 DirectDeclarator        : ident                                                             { DDIdent $1 }
-                        | DirectDeclarator '[' TypeQualifierList AssignmentExpr ']'         { DDPlaceholder }
-                        | DirectDeclarator '[' TypeQualifierList '*' ']'                    { DDPlaceholder }       
-                        | DirectDeclarator '[' TypeQualifierList ']'                        { DDPlaceholder }
-                        | DirectDeclarator '[' static TypeQualifierList AssignmentExpr ']'  { DDPlaceholder }
-                        | DirectDeclarator '[' static AssignmentExpr ']'                    { DDPlaceholder }
-                        | DirectDeclarator '[' TypeQualifierList static AssignmentExpr ']'  { DDPlaceholder }
-                        | DirectDeclarator '[' AssignmentExpr ']'                           { DDPlaceholder }
-                        | DirectDeclarator '[' '*' ']'                                      { DDPlaceholder }     
-                        | DirectDeclarator '[' ']'                                          { DDPlaceholder }
+                        -- array declarations
+                        | DirectDeclarator '[' TypeQualifierList AssignmentExpr ']'         { ( DDArr $1 False $3 (Just $4) False) :: DirectDeclarator }
+                        | DirectDeclarator '[' TypeQualifierList '*' ']'                    { ( DDArr $1 False $3 Nothing   True ) :: DirectDeclarator }       
+                        | DirectDeclarator '[' TypeQualifierList ']'                        { ( DDArr $1 False $3 Nothing   False) :: DirectDeclarator }
+                        | DirectDeclarator '[' static TypeQualifierList AssignmentExpr ']'  { ( DDArr $1 True  $4 (Just $5) False) :: DirectDeclarator }
+                        | DirectDeclarator '[' static AssignmentExpr ']'                    { ( DDArr $1 True  [] (Just $4) False) :: DirectDeclarator }
+                        | DirectDeclarator '[' TypeQualifierList static AssignmentExpr ']'  { ( DDArr $1 True  $3 (Just $5) False) :: DirectDeclarator }
+                        | DirectDeclarator '[' AssignmentExpr ']'                           { ( DDArr $1 False [] (Just $3) False) :: DirectDeclarator }
+                        | DirectDeclarator '[' '*' ']'                                      { ( DDArr $1 False [] Nothing   True ) :: DirectDeclarator }     
+                        | DirectDeclarator '[' ']'                                          { ( DDArr $1 False [] Nothing   False) :: DirectDeclarator }
+                        -- function declarations
                         | '(' Declarator ')'                                                { DDRec $2 }
-                        | DirectDeclarator '(' ParameterTypeList ')'                        { DDPlaceholder }     
-                        | DirectDeclarator '(' IdentifierList ')'                           { DDPlaceholder }    
-                        | DirectDeclarator '(' ')'                                          { DDPlaceholder }   
+                        | DirectDeclarator '(' ParameterTypeList ')'                        { ( DDFuncPList   $1 $3  ) :: DirectDeclarator }     
+                        | DirectDeclarator '(' IdentifierList ')'                           { ( DDFuncIList $1 $3) :: DirectDeclarator }    
+                        | DirectDeclarator '(' ')'                                          { ( DDFuncIList $1 []) :: DirectDeclarator }   
                                                                             
                                                                             
 -- declarators
-Pointer                 : '*' TypeQualifierList Pointer { Pointer $2 (Just $3) }
-                        | '*' TypeQualifierList         { Pointer $2 Nothing }
-                        | '*' Pointer                   { Pointer [] (Just $2)}
-                        | '*'                           { Pointer [] Nothing }
+Pointer                 : '*' TypeQualifierList Pointer { (Pointer $2 (Just $3)) :: Pointer }
+                        | '*' TypeQualifierList         { (Pointer $2 Nothing) :: Pointer }
+                        | '*' Pointer                   { (Pointer [] (Just $2)) :: Pointer}
+                        | '*'                           { (Pointer [] Nothing) :: Pointer }
 
 TypeQualifierList       : TypeQualifierListI { reverse $1 }
 TypeQualifierListI      : TypeQualifier { [ $1 ] }
                         | TypeQualifierListI TypeQualifier { $2 : $1 }
 
-ParameterTypeList       : ParameterList                 { $1 }
---ParameterTypeList       : ParameterList ',' '...'       {  }
+ParameterTypeList       : ParameterList                 { reverse $1 }
+--                      | ParameterList ',' '...'       {  }
 
-ParameterList           : ParameterListI                            { reverse $1 }
-ParameterListI          : ParameterDeclaration                      { [ $1 ] }
-                        | ParameterListI ',' ParameterDeclaration   { $3 : $1 }
+ParameterList           : ParameterDeclaration                      { [ $1 ] }
+                        | ParameterList ',' ParameterDeclaration    { $3 : $1 }
 
-ParameterDeclaration    : DeclarationSpecifiers Declarator          { ParameterDeclaration ($1 :: DeclarationSpecifiers) ($2 :: Declarator) }
-                        | DeclarationSpecifiers AbstractDeclarator  { AbsParameterDeclaration $1 $2 }
+ParameterDeclaration    : DeclarationSpecifiers Declarator          { (ParameterDeclaration $1 $2 ) :: ParameterDeclaration}
+                        | DeclarationSpecifiers AbstractDeclarator  { (AbsParameterDeclaration $1 $2 ) :: ParameterDeclaration}
 
 IdentifierList          : IdentifierListI           { reverse $1 }
 IdentifierListI         : ident                     { [ $1 ] }
