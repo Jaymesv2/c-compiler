@@ -6,19 +6,13 @@ import Compiler.Parser.Lexer
 import Compiler.AST
 
 --data ParseError = ParseError
-
---parseError :: [Token] -> a
---parseError _ = error "Parse error"
 }
 
---%monad { E } { thenE } { returnE }
-%monad { IO }
-
 %name clike
+%error {parseError}
+%monad {Alex}
+%lexer {(alexMonadScan >>=)} {EOF}
 %tokentype { Token }
---%error { parseError }
-%error { (\x -> error (show x)) }
-
 
 %token
     ident   { Ident $$ }
@@ -55,6 +49,7 @@ import Compiler.AST
     uBool   {  TuBool}
     uComplex {  TuComplex}
     uImaginary {  TuImaginary}
+    typeName{ TTypeName $$ }
     '{'     { LBrace }
     '}'     { RBrace }
     '('     { LParen }
@@ -269,7 +264,7 @@ TypeSpecifier  : void           { PrimType PVoid }
                 | uImaginary    { PrimType PuImaginary }
                 | StructOrUnionSpecifier    {StructType $1 }
                 | EnumSpecifier              {EnumType $1 }
-                -- | TypedefName       { IdentType $1 }
+                | TypedefName       { IdentType $1 }
 -- page 108
 TypeQualifier   : const         { TQConst }
                 -- | restrict  {}
@@ -312,7 +307,6 @@ StructDeclarator        : Declarator            { (StructDeclarator ($1 :: Decla
                         --| ':' Expr   { (StructDeclarator ($1 :: Declarator) (Just ($3 :: Expr))) :: StructDeclarator }
                         -- I could support bitfields but I dont really want to :/
 
-
 -- page 104
 EnumSpecifier   : enum ident '{' EnumeratorList '}'     { EnumSpecifier (Just $2) $4 }
                 | enum  '{' EnumeratorList '}'          { EnumSpecifier Nothing $3 }
@@ -323,7 +317,6 @@ EnumSpecifier   : enum ident '{' EnumeratorList '}'     { EnumSpecifier (Just $2
 -- little hack for the list building
 EnumeratorList  :   EnumeratorListI { reverse $1 }
 
-
 EnumeratorListI : Enumerator                        { [ $1 ]}
                 | EnumeratorListI ',' Enumerator    { $3 : $1 }
 
@@ -333,12 +326,9 @@ Enumerator      : EnumerationConstant             { ($1, Nothing) }
 
 EnumerationConstant : ident { $1 }
 
-
 -- Page 114
 Declarator  : Pointer DirectDeclarator      { Declarator (Just $1) $2 }
             | DirectDeclarator              { Declarator Nothing $1 }
-
-
 
 
 -- revisit these rules, (wtf is the _opt_ supposed to do???).
@@ -406,7 +396,7 @@ DirectAbstractDeclarator    : '(' AbstractDeclarator ')'                        
                             | '(' ')'                                           {Parens Nothing []}
                             
 -- page 123
-TypedefName : ident { $1 }
+TypedefName : typeName { $1 }
 
 -- page 125
 Initializer : AssignmentExpr                { InitExpr $1 }
@@ -506,3 +496,9 @@ catchE m k =
       Ok a     -> Ok a
       Failed e -> k e
 -}
+
+
+{
+parseError :: Token -> Alex a
+parseError t = error "failure :("
+}

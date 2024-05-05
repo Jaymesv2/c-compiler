@@ -116,5 +116,5 @@ executable compiler
   other-modules:
     Compiler.AST
     Compiler.Parser.Lexer
-    --Compiler.Parser.Grammar
+    Compiler.Parser.Grammar
     -- Compiler.Parser.Monad

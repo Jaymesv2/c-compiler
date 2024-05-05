@@ -29,11 +29,9 @@ main = do
   let tree = directDeclarator tokens
   -}
   let x = "int main(int argc, char** argv) { println(\"hello world\\n\"); }"
-  let tokens = alexScanTokens x
+  --let tokens = alexScanTokens x
   --let tree = clike tokens
-  tree <- clike tokens
-
-  
+  let tree =  runAlex x clike
   print $ tree
  where
   t1 = do

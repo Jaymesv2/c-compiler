@@ -1,7 +1,9 @@
 {
-module Compiler.Parser.Lexer (alexMonadScan, Token (..), Literal (..), Identifier) where
+module Compiler.Parser.Lexer (alexMonadScan, runAlex, Alex, alexEOF, Token (..), Literal (..), Identifier) where
 import qualified Data.Text as T
 import qualified Data.List as L
+import qualified Data.Map as M
+import Data.Maybe
 -- import Compiler.Parser.Monad
 }
 
@@ -88,7 +90,7 @@ tokens :-
     ","                     { \(_,_,_,s) _ -> pure $ Comma  }
     "."                     { \(_,_,_,s) _ -> pure $ Dot    }
     ":"                     { \(_,_,_,s) _ -> pure $ Colon  }
-    $nondigit $identcont*   { \(_,_,_,s) _ -> pure $ Ident s}
+    $nondigit $identcont*   { \(_,_,_,t) _ -> alexGetUserState <&> (\(AlexUserState (symtblLst:_)) -> if isJust (lookup t symtblLst) then TTypeName t else Ident t) }
     $nzdigit $digit*        { \(_,_,_,s) _ -> pure $ Lit (LNum s)}
     \" @schar \"            { \(_,_,_,s) _ -> pure $ Lit (LString s)}
     \' $printable \'        { \(_,_,_,s) _ -> pure $ Lit (LChar s)}
@@ -107,6 +109,7 @@ data Literal =
 data Token = 
     -- keywords
       Ident Identifier --T.Text
+    | TTypeName Identifier
     | Lit Literal
 
     -- keywords
@@ -185,58 +188,13 @@ data Token =
     | EOF
     deriving (Eq, Show)
 
-{-
-data AlexState = AlexState
-  { alex_pos   :: !AlexPosn  -- position at current input location
-  , alex_inp   :: String     -- the current input
-  , alex_chr   :: !Char      -- the character before the input
-  , alex_bytes :: [Byte]     -- rest of the bytes for the current char
-  , alex_scd   :: !Int       -- the current startcode
-  } 
-
-newtype Alex a = Alex { unAlex :: AlexState
-                               -> Either String (AlexState, a) }
-
--- instance Functor     Alex where ...
--- instance Applicative Alex where ...
--- instance Monad       Alex where ...
-
-runAlex          :: String -> Alex a -> Either String a
-
-type AlexInput =
-  ( AlexPosn                 -- current position,
-  , Char                     -- previous char
-  , [Byte]                   -- rest of the bytes for the current char
-  , String                   -- current input string
-  )
-
-alexGetInput     :: Alex AlexInput
-alexSetInput     :: AlexInput -> Alex ()
-
-alexError        :: String -> Alex a
-
-alexGetStartCode :: Alex Int
-alexSetStartCode :: Int -> Alex ()
-
-
---alexMonadScan :: Alex result
-alexMonadScan :: Alex Token
-
-
---alexEOF :: Alex result
--}
-
---type AlexAction a = AlexInput -> Int -> Alex a
--- { ... }  :: AlexAction result
 alexEOF :: Alex Token
 alexEOF = pure EOF
 
-
-
-data AlexUserState = AlexUserState ()
+data AlexUserState = AlexUserState [M.Map T.Text ()]
 
 alexInitUserState :: AlexUserState
-alexInitUserState = AlexUserState ()
+alexInitUserState = AlexUserState [M.empty]
 
 
 }
