@@ -1,11 +1,11 @@
 {
-module Compiler.Parser.Lexer (alexScanTokens, Token (..), Literal (..), Identifier) where
+module Compiler.Parser.Lexer (alexMonadScan, Token (..), Literal (..), Identifier) where
 import qualified Data.Text as T
 import qualified Data.List as L
-
+-- import Compiler.Parser.Monad
 }
 
-%wrapper "basic"
+%wrapper "monadUserState-strict-text"
 
 -- %encoding "latin-1"
 
@@ -24,92 +24,84 @@ $identcont = [ $digit $nondigit ]
 --    hex literals
 --    octal literals
 tokens :-
-    break                   { stupid $ \(_,_,_,s) _ -> Break }
-    case                    { stupid $ \(_,_,_,s) _ -> Case }
-    while                   { stupid $ \(_,_,_,s) _ -> While}
-    for                     { stupid $ \(_,_,_,s) _ -> For }
-    else                    { stupid $ \(_,_,_,s) _ -> Else }
-    goto                    { stupid $ \(_,_,_,s) _ -> Goto}
-    if                      { stupid $ \(_,_,_,s) _ -> If }
-    return                  { stupid $ \(_,_,_,s) _ -> Return }
-    sizeof                  { stupid $ \(_,_,_,s) _ -> Sizeof}
-    struct                  { stupid $ \(_,_,_,s) _ -> Struct}
-    switch                  { stupid $ \(_,_,_,s) _ -> Switch }
-    union                   { stupid $ \(_,_,_,s) _ -> Union }
-    void                    { stupid $ \(_,_,_,s) _ -> Void }
-    static                  { stupid $ \(_,_,_,s) _ -> Static }
-    inline                  { stupid $ \(_,_,_,s) _ -> Inline }
-    extern                  { stupid $ \(_,_,_,s) _ -> Extern }
-    enum                    { stupid $ \(_,_,_,s) _ -> Enum }
-    const                   { stupid $ \(_,_,_,s) _ -> Const }
-    default                 { stupid $ \(_,_,_,s) _ -> Default }
-    do                      { stupid $ \(_,_,_,s) _ -> Do }
-    continue                { stupid $ \(_,_,_,s) _ -> Continue}
-    char                    { stupid $ \(_,_,_,s) _ -> TChar}
-    short                   { stupid $ \(_,_,_,s) _ -> TShort}
-    int                     { stupid $ \(_,_,_,s) _ -> TInt}
-    long                    { stupid $ \(_,_,_,s) _ -> TLong}
-    float                   { stupid $ \(_,_,_,s) _ -> TFloat}
-    double                  { stupid $ \(_,_,_,s) _ -> TDouble}
-    signed                  { stupid $ \(_,_,_,s) _ -> TSigned}
-    unsigned                { stupid $ \(_,_,_,s) _ -> TUnsigned}
-    _Bool                   { stupid $ \(_,_,_,s) _ -> TuBool}
-    _Complex                { stupid $ \(_,_,_,s) _ -> TuComplex}
-    _Imaginary              { stupid $ \(_,_,_,s) _ -> TuImaginary}
-    "{"                     { stupid $ \(_,_,_,s) _ -> LBrace }
-    "}"                     { stupid $ \(_,_,_,s) _ -> RBrace }
-    "("                     { stupid $ \(_,_,_,s) _ -> LParen }
-    ")"                     { stupid $ \(_,_,_,s) _ -> RParen }
-    "["                     { stupid $ \(_,_,_,s) _ -> LBrack }
-    "]"                     { stupid $ \(_,_,_,s) _ -> RBrack }
-    "->"                    { stupid $ \(_,_,_,s) _ -> Arrow  }
-    "&"                     { stupid $ \(_,_,_,s) _ -> BitAnd }
-    "|"                     { stupid $ \(_,_,_,s) _ -> BitOr   }
-    "*"                     { stupid $ \(_,_,_,s) _ -> Times }
-    "+"                     { stupid $ \(_,_,_,s) _ -> Plus }
-    "-"                     { stupid $ \(_,_,_,s) _ -> Minus }
-    "~"                     { stupid $ \(_,_,_,s) _ -> Compliment }
-    "!"                     { stupid $ \(_,_,_,s) _ -> Not }
-    "/"                     { stupid $ \(_,_,_,s) _ -> Divide }
-    "%"                     { stupid $ \(_,_,_,s) _ -> Modulo }
-    "<<"                    { stupid $ \(_,_,_,s) _ -> LShift } 
-    ">>"                    { stupid $ \(_,_,_,s) _ -> RShift } 
-    "<"                     { stupid $ \(_,_,_,s) _ -> Lt     }
-    "<="                    { stupid $ \(_,_,_,s) _ -> Le     }
-    ">"                     { stupid $ \(_,_,_,s) _ -> Gt     }
-    ">="                    { stupid $ \(_,_,_,s) _ -> Ge     }
-    "=="                    { stupid $ \(_,_,_,s) _ -> Eq     }
-    "!="                    { stupid $ \(_,_,_,s) _ -> Neq    }
-    "^"                     { stupid $ \(_,_,_,s) _ -> BitXor }
-    "&&"                    { stupid $ \(_,_,_,s) _ -> LAnd   }
-    "||"                    { stupid $ \(_,_,_,s) _ -> LOr    }
-    ";"                     { stupid $ \(_,_,_,s) _ -> Semi   }
-    "="                     { stupid $ \(_,_,_,s) _ -> Assign }
-    ","                     { stupid $ \(_,_,_,s) _ -> Comma  }
-    "."                     { stupid $ \(_,_,_,s) _ -> Dot    }
-    ":"                     { stupid $ \(_,_,_,s) _ -> Colon  }
-    $nondigit $identcont*   { stupid $ \(_,_,_,s) _ -> Ident s}
-    $nzdigit $digit*        { stupid $ \(_,_,_,s) _ -> Lit (LNum s)}
-    \" @schar \"            { stupid $ \(_,_,_,s) _ -> Lit (LString s)}
-    \' $printable \'        { stupid $ \(_,_,_,s) _ -> Lit (LChar s)}
+    break                   { \(_,_,_,s) _ -> pure $ Break }
+    case                    { \(_,_,_,s) _ -> pure $ Case }
+    while                   { \(_,_,_,s) _ -> pure $ While}
+    for                     { \(_,_,_,s) _ -> pure $ For }
+    else                    { \(_,_,_,s) _ -> pure $ Else }
+    goto                    { \(_,_,_,s) _ -> pure $ Goto}
+    if                      { \(_,_,_,s) _ -> pure $ If }
+    return                  { \(_,_,_,s) _ -> pure $ Return }
+    sizeof                  { \(_,_,_,s) _ -> pure $ Sizeof}
+    struct                  { \(_,_,_,s) _ -> pure $ Struct}
+    switch                  { \(_,_,_,s) _ -> pure $ Switch }
+    union                   { \(_,_,_,s) _ -> pure $ Union }
+    void                    { \(_,_,_,s) _ -> pure $ Void }
+    static                  { \(_,_,_,s) _ -> pure $ Static }
+    inline                  { \(_,_,_,s) _ -> pure $ Inline }
+    extern                  { \(_,_,_,s) _ -> pure $ Extern }
+    enum                    { \(_,_,_,s) _ -> pure $ Enum }
+    const                   { \(_,_,_,s) _ -> pure $ Const }
+    default                 { \(_,_,_,s) _ -> pure $ Default }
+    do                      { \(_,_,_,s) _ -> pure $ Do }
+    continue                { \(_,_,_,s) _ -> pure $ Continue}
+    char                    { \(_,_,_,s) _ -> pure $ TChar}
+    short                   { \(_,_,_,s) _ -> pure $ TShort}
+    int                     { \(_,_,_,s) _ -> pure $ TInt}
+    long                    { \(_,_,_,s) _ -> pure $ TLong}
+    float                   { \(_,_,_,s) _ -> pure $ TFloat}
+    double                  { \(_,_,_,s) _ -> pure $ TDouble}
+    signed                  { \(_,_,_,s) _ -> pure $ TSigned}
+    unsigned                { \(_,_,_,s) _ -> pure $ TUnsigned}
+    _Bool                   { \(_,_,_,s) _ -> pure $ TuBool}
+    _Complex                { \(_,_,_,s) _ -> pure $ TuComplex}
+    _Imaginary              { \(_,_,_,s) _ -> pure $ TuImaginary}
+    "{"                     { \(_,_,_,s) _ -> pure $ LBrace }
+    "}"                     { \(_,_,_,s) _ -> pure $ RBrace }
+    "("                     { \(_,_,_,s) _ -> pure $ LParen }
+    ")"                     { \(_,_,_,s) _ -> pure $ RParen }
+    "["                     { \(_,_,_,s) _ -> pure $ LBrack }
+    "]"                     { \(_,_,_,s) _ -> pure $ RBrack }
+    "->"                    { \(_,_,_,s) _ -> pure $ Arrow  }
+    "&"                     { \(_,_,_,s) _ -> pure $ BitAnd }
+    "|"                     { \(_,_,_,s) _ -> pure $ BitOr   }
+    "*"                     { \(_,_,_,s) _ -> pure $ Times }
+    "+"                     { \(_,_,_,s) _ -> pure $ Plus }
+    "-"                     { \(_,_,_,s) _ -> pure $ Minus }
+    "~"                     { \(_,_,_,s) _ -> pure $ Compliment }
+    "!"                     { \(_,_,_,s) _ -> pure $ Not }
+    "/"                     { \(_,_,_,s) _ -> pure $ Divide }
+    "%"                     { \(_,_,_,s) _ -> pure $ Modulo }
+    "<<"                    { \(_,_,_,s) _ -> pure $ LShift } 
+    ">>"                    { \(_,_,_,s) _ -> pure $ RShift } 
+    "<"                     { \(_,_,_,s) _ -> pure $ Lt     }
+    "<="                    { \(_,_,_,s) _ -> pure $ Le     }
+    ">"                     { \(_,_,_,s) _ -> pure $ Gt     }
+    ">="                    { \(_,_,_,s) _ -> pure $ Ge     }
+    "=="                    { \(_,_,_,s) _ -> pure $ Eq     }
+    "!="                    { \(_,_,_,s) _ -> pure $ Neq    }
+    "^"                     { \(_,_,_,s) _ -> pure $ BitXor }
+    "&&"                    { \(_,_,_,s) _ -> pure $ LAnd   }
+    "||"                    { \(_,_,_,s) _ -> pure $ LOr    }
+    ";"                     { \(_,_,_,s) _ -> pure $ Semi   }
+    "="                     { \(_,_,_,s) _ -> pure $ Assign }
+    ","                     { \(_,_,_,s) _ -> pure $ Comma  }
+    "."                     { \(_,_,_,s) _ -> pure $ Dot    }
+    ":"                     { \(_,_,_,s) _ -> pure $ Colon  }
+    $nondigit $identcont*   { \(_,_,_,s) _ -> pure $ Ident s}
+    $nzdigit $digit*        { \(_,_,_,s) _ -> pure $ Lit (LNum s)}
+    \" @schar \"            { \(_,_,_,s) _ -> pure $ Lit (LString s)}
+    \' $printable \'        { \(_,_,_,s) _ -> pure $ Lit (LChar s)}
     $white+;
-
 {
 
-stupid :: ((Int,Int,Int,String) -> Int -> Token) -> (String -> Token)
-stupid f = \s -> f (0,0,0,s) 0
-
---stupid :: (AlexInput -> Int -> Alex a) -> (AlexInput -> Int -> Alex a)
---stupid a = a
-
-
-type Identifier = String
+type Identifier = T.Text
 
 data Literal =
-    LString String
-  | LChar String
-  | LNum String
-  | LFloat String
+    LString T.Text
+  | LChar   T.Text
+  | LNum    T.Text
+  | LFloat  T.Text
   deriving (Eq, Show)
 
 data Token = 
@@ -232,11 +224,19 @@ alexMonadScan :: Alex Token
 
 
 --alexEOF :: Alex result
-alexEOF :: Alex Token
-alexEOF = pure EOF
 -}
 
 --type AlexAction a = AlexInput -> Int -> Alex a
 -- { ... }  :: AlexAction result
+alexEOF :: Alex Token
+alexEOF = pure EOF
+
+
+
+data AlexUserState = AlexUserState ()
+
+alexInitUserState :: AlexUserState
+alexInitUserState = AlexUserState ()
+
 
 }
