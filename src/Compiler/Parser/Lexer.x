@@ -21,12 +21,84 @@ import Compiler.Parser.Tokens
 import Compiler.Parser.Monad
 }
 
+-- need to add 
+
 $digit = [0-9]    -- digits
 $nzdigit = [1-9]
-$nondigit = [_a-zA-Z]
-$identcont = [ $digit $nondigit ]
+$octaldigit = [0-7]
 
+$nondigit = [_a-zA-Z]
+
+$hexdigit = [ $digit a-f A-F ]
+
+$unsignedsuffix = [uU]
+$longsuffix = [lL]
+@longlongsuffix = "ll" | "LL"
+$floatsuffix = [flFL]
+
+@integersuffix  = $unsignedsuffix $longsuffix? 
+                | $unsignedsuffix @longlongsuffix?
+                | $longsuffix $unsignedsuffix?
+                | @longlongsuffix $unsignedsuffix?
+
+$identnondigit = [ $digit $nondigit ]
+
+@hexquad = $hexdigit{4}
 @schar = $printable* 
+
+@universalCharacterNameInner = "u" @hexquad | "U" @hexquad @hexquad
+@universalCharacterName = "\\" @universalCharacterNameInner
+
+@hexprefix = "0x" | "0X"
+
+
+--$sourceset
+
+-- @constant = 
+--     integerConst
+--     floatingConst
+--     enumerationConst
+--     characterConst
+
+
+-- constants 
+--@integerConst = 
+--  
+--
+--
+--
+-- TODO: add to lexer
+--@octalconst = "0" | @octalconst $octaldigit
+
+
+
+-- Char Constants
+
+
+--@simpleescapesequence = '\\'  -- ( '\'' | '"' | '?' | '\\' | 'a' | 'b' | 'f' | 'n' | 'r' | 't' | 'v')
+--@octalescapesequence = '\\' $octaldigit{1,3}
+--@hexescapesequence = '\\x' $hexdigit+
+
+
+@escapesequence = '\\' ([\'\"\?\\abfnrtv] | $octaldigit{1,3} | 'x' $hexdigit+ | @universalCharacterNameInner)
+
+@cchar = [^\'\n\\] | @escapesequence
+
+@schar = [^\"\n\\] | @escapesequence
+
+
+$floatingsuffix = [lfLF]
+
+@sign = "+" | "-"
+
+@fractionalConstant = (($digit+)? "." $digit+) | ($digit+ ".")
+@exponentialPart = [eE] sign? $digit+
+
+@hexFractionalConstant = (($hexdigit+)? "." $hexdigit+) | ($hexdigit+ '.')
+@hexExponentialPart = [pP] sign? $hexdigit+
+
+$hchar = [^\n]
+$qchar = [^\n\"]
 
 -- todo: 
 --    escape sequences in strings and chars
@@ -34,87 +106,144 @@ $identcont = [ $digit $nondigit ]
 --    hex literals
 --    octal literals
 tokens :-
-    auto                    { \(_,_,_,_) _ -> pure $ TypeDef }
-    break                   { \(_,_,_,_) _ -> pure $ Break }
-    case                    { \(_,_,_,_) _ -> pure $ Case }
-    const                   { \(_,_,_,_) _ -> pure $ Const }
-    continue                { \(_,_,_,_) _ -> pure $ Continue}
-    default                 { \(_,_,_,_) _ -> pure $ Default }
-    do                      { \(_,_,_,_) _ -> pure $ Do }
-    else                    { \(_,_,_,_) _ -> pure $ Else }
-    enum                    { \(_,_,_,_) _ -> pure $ Enum }
-    extern                  { \(_,_,_,_) _ -> pure $ Extern }
-    for                     { \(_,_,_,_) _ -> pure $ For }
-    goto                    { \(_,_,_,_) _ -> pure $ Goto}
-    if                      { \(_,_,_,_) _ -> pure $ If }
-    inline                  { \(_,_,_,_) _ -> pure $ Inline }
-    register                { \(_,_,_,_) _ -> pure $ Register }
-    restrict                { \(_,_,_,_) _ -> pure $ Restrict }
-    return                  { \(_,_,_,_) _ -> pure $ Return }
-    static                  { \(_,_,_,_) _ -> pure $ Static }
-    sizeof                  { \(_,_,_,_) _ -> pure $ Sizeof}
-    struct                  { \(_,_,_,_) _ -> pure $ Struct}
-    switch                  { \(_,_,_,_) _ -> pure $ Switch }
-    typedef                 { \(_,_,_,_) _ -> pure $ TypeDef }
-    union                   { \(_,_,_,_) _ -> pure $ Union }
-    volatile                { \(_,_,_,_) _ -> pure $ Volatile }
-    while                   { \(_,_,_,_) _ -> pure $ While}
+<0> auto                      { basicAction TypeDef }
+<0> break                     { basicAction Break }
+<0> case                      { basicAction Case }
+<0> const                     { basicAction Const }
+<0> continue                  { basicAction Continue}
+<0> default                   { basicAction Default }
+<0> do                        { basicAction Do }
+<0> else                      { basicAction Else }
+<0> enum                      { basicAction Enum }
+<0> extern                    { basicAction Extern }
+<0> for                       { basicAction For }
+<0> goto                      { basicAction Goto}
+<0> if                        { basicAction If }
+<0> inline                    { basicAction Inline }
+<0> register                  { basicAction Register }
+<0> restrict                  { basicAction Restrict }
+<0> return                    { basicAction Return }
+<0> static                    { basicAction Static }
+<0> sizeof                    { basicAction Sizeof}
+<0> struct                    { basicAction Struct}
+<0> switch                    { basicAction Switch }
+<0> typedef                   { basicAction TypeDef }
+<0> union                     { basicAction Union }
+<0> volatile                  { basicAction Volatile }
+<0> while                     { basicAction While}
+
+<0> void                      { basicAction Void }
+<0> char                      { basicAction TChar}
+<0> short                     { basicAction TShort}
+<0> int                       { basicAction TInt}
+<0> long                      { basicAction TLong}
+<0> float                     { basicAction TFloat}
+<0> double                    { basicAction TDouble}
+<0> signed                    { basicAction TSigned}
+<0> unsigned                  { basicAction TUnsigned}
+<0> _Bool                     { basicAction TuBool}
+<0> _Complex                  { basicAction TuComplex}
+<0> _Imaginary                { basicAction TuImaginary}
+<0> "{"                       { basicAction LBrace }
+<0> "}"                       { basicAction RBrace }
+<0> "("                       { basicAction LParen }
+<0> ")"                       { basicAction RParen }
+<0> "["                       { basicAction LBrack }
+<0> "]"                       { basicAction RBrack }
+<0> "->"                      { basicAction Arrow  }
+<0> "&"                       { basicAction BitAnd }
+<0> "|"                       { basicAction BitOr   }
+<0> "*"                       { basicAction Times }
+<0> "+"                       { basicAction Plus }
+<0> "-"                       { basicAction Minus }
+<0> "~"                       { basicAction Compliment }
+<0> "!"                       { basicAction Not }
+<0> "/"                       { basicAction Divide }
+<0> "%"                       { basicAction Modulo }
+<0> "<<"                      { basicAction LShift } 
+<0> ">>"                      { basicAction RShift } 
+<0> "<"                       { basicAction Lt     }
+<0> "<="                      { basicAction Le     }
+<0> ">"                       { basicAction Gt     }
+<0> ">="                      { basicAction Ge     }
+<0> "=="                      { basicAction Eq     }
+<0> "!="                      { basicAction Neq    }
+<0> "^"                       { basicAction BitXor }
+<0> "&&"                      { basicAction LAnd   }
+<0> "||"                      { basicAction LOr    }
+<0> ";"                       { basicAction Semi   }
+<0> "="                       { basicAction Assign }
+<0> ","                       { basicAction Comma  }
+<0> "."                       { basicAction Dot    }
+<0> ":"                       { basicAction Colon  }
+
+    -- new operators    
+<0> "++"                      { basicAction PlusPlus }
+<0> "--"                      { basicAction MinusMinus }
+<0> "?"                       { basicAction Question  }
+<0> "..."                     { basicAction Variadic  }
+<0> "*="                      { basicAction TimesAssign }
+<0> "/="                      { basicAction DivAssign}
+<0> "%="                      { basicAction ModAssign}
+<0> "+="                      { basicAction PlusAssign}
+<0> "-="                      { basicAction MinusAssign}
+<0> "<<="                     { basicAction LShiftAssign}
+<0> ">>="                     { basicAction RShiftAssign}
+<0> "&="                      { basicAction AndAssign}
+<0> "^="                      { basicAction XorAssign}
+<0> "|="                      { basicAction OrAssign}
+<0> "#"                       { basicAction Stringize }
+<0> "##"                      { basicAction TokenPaste}
+
+        -- check if an ident is a type or a normal ident
+        -- TODO: add a check for enum constants
+<0>  $nondigit $identnondigit* { \(_,_,_,t) i -> alexGetUserState <&> (\(AlexUserState (symtbl:_)) -> if isJust (M.lookup t symtbl) then TTypeName (T.take i t) else Ident (T.take i t)) }
+        -- integer constants
+<0>  $nzdigit $digit* @integersuffix         {\(_,_,_,t) i -> pure $ error ""}
+
+        -- octal const
+<0>  "0" $octaldigit* @integersuffix         {\(_,_,_,t) i -> pure $ error ""}
+        -- hex const
+<0>  @hexprefix $hexdigit* @integersuffix    {\(_,_,_,t) i -> pure $ error ""}
+
+        -- floating constants
+<0>  @fractionalConstant @exponentialPart? $floatingsuffix? {error ""}
+<0>  $digit+ @exponentialPart $floatingsuffix? {error ""}
+<0>  @hexprefix @hexFractionalConstant @hexExponentialPart $floatingsuffix? {error ""}
+
+<0>  \" @schar+ \"              { \(_,_,_,t) i -> pure $ StringLiteral (T.take i t) }
+        -- wide string literals
+<0>  "L\"" @schar+ \"              { \(_,_,_,t) i -> pure $ StringLiteral (T.take i t) } 
+
+<0>  \' @cchar+ \'          { \(_,_,_,t) i -> pure $ Constant (CharConst (T.take i t))}
+
+        -- headernames
+<0>  "<" [^\n>]+ ">"              { \(_,_,_,t) i -> pure $ error "" }
+<0>  \" [^\n\"] \"           { \(_,_,_,t) i -> pure $ error "" }
+
+        -- preprocessing numbers
+<0>  "."? $digit+ (identnondigit | [eEpP] sign | ".")? {\(_,_,_,t) i -> error ""}
+<0>  $white+;
+        -- matche everything other than 
+<0>  "//" { begin linecomment }
+<0>  "/*" {begin blockcomment}
+
+<linecomment> [^\n]* ;  -- match non linebreaks
+<linecomment> "\n" {begin 0} -- switch back to code
+
+<blockcomment> [^\*]*; -- match everything other than *
+<blockcomment> "*" [^\/]; -- match * not followed by /
+<blockcomment> "*/" {begin 0} -- match */
+-- { begin 0 }
+-- <linecomment>
+-- <blockcomment> 
     
-    void                    { \(_,_,_,_) _ -> pure $ Void }
-    char                    { \(_,_,_,_) _ -> pure $ TChar}
-    short                   { \(_,_,_,_) _ -> pure $ TShort}
-    int                     { \(_,_,_,_) _ -> pure $ TInt}
-    long                    { \(_,_,_,_) _ -> pure $ TLong}
-    float                   { \(_,_,_,_) _ -> pure $ TFloat}
-    double                  { \(_,_,_,_) _ -> pure $ TDouble}
-    signed                  { \(_,_,_,_) _ -> pure $ TSigned}
-    unsigned                { \(_,_,_,_) _ -> pure $ TUnsigned}
-    _Bool                   { \(_,_,_,_) _ -> pure $ TuBool}
-    _Complex                { \(_,_,_,_) _ -> pure $ TuComplex}
-    _Imaginary              { \(_,_,_,_) _ -> pure $ TuImaginary}
-    "{"                     { \(_,_,_,_) _ -> pure $ LBrace }
-    "}"                     { \(_,_,_,_) _ -> pure $ RBrace }
-    "("                     { \(_,_,_,_) _ -> pure $ LParen }
-    ")"                     { \(_,_,_,_) _ -> pure $ RParen }
-    "["                     { \(_,_,_,_) _ -> pure $ LBrack }
-    "]"                     { \(_,_,_,_) _ -> pure $ RBrack }
-    "->"                    { \(_,_,_,_) _ -> pure $ Arrow  }
-    "&"                     { \(_,_,_,_) _ -> pure $ BitAnd }
-    "|"                     { \(_,_,_,_) _ -> pure $ BitOr   }
-    "*"                     { \(_,_,_,_) _ -> pure $ Times }
-    "+"                     { \(_,_,_,_) _ -> pure $ Plus }
-    "-"                     { \(_,_,_,_) _ -> pure $ Minus }
-    "~"                     { \(_,_,_,_) _ -> pure $ Compliment }
-    "!"                     { \(_,_,_,_) _ -> pure $ Not }
-    "/"                     { \(_,_,_,_) _ -> pure $ Divide }
-    "%"                     { \(_,_,_,_) _ -> pure $ Modulo }
-    "<<"                    { \(_,_,_,_) _ -> pure $ LShift } 
-    ">>"                    { \(_,_,_,_) _ -> pure $ RShift } 
-    "<"                     { \(_,_,_,_) _ -> pure $ Lt     }
-    "<="                    { \(_,_,_,_) _ -> pure $ Le     }
-    ">"                     { \(_,_,_,_) _ -> pure $ Gt     }
-    ">="                    { \(_,_,_,_) _ -> pure $ Ge     }
-    "=="                    { \(_,_,_,_) _ -> pure $ Eq     }
-    "!="                    { \(_,_,_,_) _ -> pure $ Neq    }
-    "^"                     { \(_,_,_,_) _ -> pure $ BitXor }
-    "&&"                    { \(_,_,_,_) _ -> pure $ LAnd   }
-    "||"                    { \(_,_,_,_) _ -> pure $ LOr    }
-    ";"                     { \(_,_,_,_) _ -> pure $ Semi   }
-    "="                     { \(_,_,_,_) _ -> pure $ Assign }
-    ","                     { \(_,_,_,_) _ -> pure $ Comma  }
-    "."                     { \(_,_,_,_) _ -> pure $ Dot    }
-    ":"                     { \(_,_,_,_) _ -> pure $ Colon  }
-    $nondigit $identcont*   { \(_,_,_,t) i -> alexGetUserState <&> (\(AlexUserState (symtbl:_)) -> if isJust (M.lookup t symtbl) then TTypeName (T.take i t) else Ident (T.take i t)) }
-    $nzdigit $digit*        { \(_,_,_,t) i -> pure $ Lit (LNum (T.take i t))}
-    \" @schar \"            { \(_,_,_,t) i -> pure $ Lit (LString (T.take i t))}
-    \' $printable \'        { \(_,_,_,t) i -> pure $ Lit (LChar (T.take i t))}
-    $white+;
 {
 alexEOF :: Alex Token
 alexEOF = pure EOF
 
-
-
+basicAction :: Token -> (AlexInput -> Int -> Alex Token)
+basicAction token _ _ = pure token
 
 alexMonadScan = do
     inp__ <- alexGetInput

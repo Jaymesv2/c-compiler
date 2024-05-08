@@ -9,7 +9,7 @@ import Compiler.Parser.Tokens
 --data ParseError = ParseError
 }
 
-%name clike
+%name clike TranslationUnit
 %error {parseError}
 %monad {Alex} {>>=} {return }
 %lexer {(alexMonadScan >>=)} {EOF}
@@ -18,7 +18,8 @@ import Compiler.Parser.Tokens
 %token
     ident   { Ident $$ }
     typeName{ TTypeName $$ }
-    literal { Lit $$ }
+    stringlit { StringLiteral $$ }
+    constant  { Constant $$ }
 
     auto    { Auto  }
     break   { Break }
@@ -127,8 +128,8 @@ TranslationUnitI    : ExternalDeclaration                    { [ $1 ] :: Transla
                     | TranslationUnitI ExternalDeclaration   { ($2 : $1) :: TranslationUnit }
 
 PrimaryExpr : ident         { (EIdent $1) :: Expr }
-            --| constant 
-            | literal       { (ELiteral $1) :: Expr }
+            | constant      { (EConstant $1) :: Expr}
+            | stringlit       { (EStringLiteral $1) :: Expr }
             | '(' Expr ')'  { $2 :: Expr }
 
 

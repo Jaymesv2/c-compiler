@@ -1,8 +1,6 @@
 module Compiler.Parser.Monad where
 
 import Control.Applicative as App (Applicative (..))
-import Data.Functor
-import Data.Maybe
 import Data.Text qualified
 import Data.Word (Word8)
 
@@ -18,6 +16,7 @@ data AlexUserState = AlexUserState [M.Map T.Text ()]
 alexInitUserState :: AlexUserState
 alexInitUserState = AlexUserState [M.empty]
 
+alex_tab_size :: Int
 alex_tab_size = 4
 
 -- The following is from https://github.com/haskell/alex/blob/master/data/AlexWrappers.hs
@@ -82,7 +81,7 @@ alexInputPrevChar :: AlexInput -> Char
 alexInputPrevChar (_p, c, _bs, _s) = c
 
 alexGetByte :: AlexInput -> Maybe (Byte, AlexInput)
-alexGetByte (p, c, (b : bs), s) = Just (b, (p, c, bs, s))
+alexGetByte (p, c, b : bs, s) = Just (b, (p, c, bs, s))
 alexGetByte (p, _, [], s) = case Data.Text.uncons s of
     Just (c, cs) ->
         let p' = alexMove p c
@@ -102,7 +101,7 @@ alexGetByte (p, _, [], s) = case Data.Text.uncons s of
 -- assuming the usual eight character tab stops.
 
 data AlexPosn = AlexPn !Int !Int !Int
-    deriving (Eq, Show, Ord)
+    deriving stock (Eq, Show, Ord)
 
 alexStartPos :: AlexPosn
 alexStartPos = AlexPn 0 1 1

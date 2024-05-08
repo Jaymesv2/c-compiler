@@ -1,7 +1,6 @@
 module Compiler.Parser.ParseTree where
 
 import Compiler.Parser.Tokens
-
 import Data.Text qualified as T
 
 -- page
@@ -31,7 +30,8 @@ data BinOp
 
 data Expr
     = EIdent Identifier
-    | ELiteral Literal
+    | EConstant Constant
+    | EStringLiteral T.Text
     | Bracketed Expr Expr
     | Called Expr [Expr]
     | DotE Expr Identifier
@@ -50,11 +50,13 @@ data Declaration = Declaration [DeclarationSpecifiers] (Maybe [InitDeclaration])
     deriving stock (Eq, Show)
 
 -- new type
+{-
 data DeclSpecifiers
     = DeclSpecifiers
         (Maybe StorageClassSpecifier)
         [TypeSpecifier]
         [TypeQualifier]
+-}
 
 -- This can probably be changed to an enum that just combines each of the specifiers and qualifiers and a nonempty list can be used in the above declaration
 data DeclarationSpecifiers
