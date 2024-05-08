@@ -11,10 +11,13 @@ import Data.Text qualified as T
 
 import Data.Map qualified as M
 
-data AlexUserState = AlexUserState [M.Map T.Text ()]
+data AlexUserState = AlexUserState
+    { symbol_table :: [M.Map T.Text ()]
+    , currentFile :: String
+    }
 
 alexInitUserState :: AlexUserState
-alexInitUserState = AlexUserState [M.empty]
+alexInitUserState = AlexUserState{symbol_table = [M.empty], currentFile = ""}
 
 alex_tab_size :: Int
 alex_tab_size = 4

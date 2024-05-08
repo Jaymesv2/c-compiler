@@ -3,8 +3,19 @@ module Main where
 import Compiler.Parser.Grammar
 import Compiler.Parser.Lexer
 
+import Data.Text.IO qualified as TIO
+import System.Environment
+
+-- import System.IO.Error
+
 main :: IO ()
 main = do
+  args <- getArgs
+  source <- case args of
+    [] -> error "Cannot find a program to parse"
+    h : _ -> TIO.readFile h -- will throw exception if the file doesn't exist
+  print $ runAlex source clike
+ where
   -- let x =
   --      "\
   --      \ i32 main(i32 x) { \
@@ -29,12 +40,10 @@ main = do
   let tree = directDeclarator tokens
   -}
   -- let x = "int main(int argc, char** argv) { println(\"hello world\\n\"); }"
-  let x = "typedef struct j { int i; long q; } j_t; int main(int argc, char **argv) { println(\"hello world\");}"
+  -- let x = "typedef struct j { int i; long q; } j_t; int main(int argc, char **argv) { println(\"hello world\");}"
   -- let tokens = alexScanTokens x
   -- let tree = clike tokens
-  let tree = runAlex x clike
-  print $ tree
- where
+
   t1 = do
     print "hi"
 
