@@ -4,7 +4,7 @@ import Compiler.Parser.Tokens
 import Data.Text qualified as T
 
 -- page
-data UnaryOp = URef | UDeref | UCompliment | UNot | USizeof
+data UnaryOp = URef | UDeref | UCompliment | UNot | USizeof | UPreIncr | UPostIncr | UPreDecr | UPostDecr | UPlus | UMinus
     deriving stock (Eq, Show)
 
 data BinOp
@@ -28,6 +28,9 @@ data BinOp
     | BLogicalOr
     deriving stock (Eq, Show)
 
+data AssignmentOp = ATimesAssign | ADivAssign | AModAssign | APlusAssign | AMinusAssign | ALShiftAssign | ARShiftAssign | AAndAssign | AXorAssign | AOrAssign
+    deriving stock (Eq, Show)
+
 data Expr
     = EIdent Identifier
     | EConstant Constant
@@ -41,7 +44,9 @@ data Expr
     | SizeofTypeE TypeName
     | CastE TypeName Expr
     | BinaryOp Expr BinOp Expr
-    | AssignE Expr Expr
+    | ConditionalExpr Expr Expr Expr
+    | SimpleAssignE Expr Expr
+    | CompoundAssignE Expr AssignmentOp Expr
     | CommaE Expr Expr
     deriving stock (Eq, Show)
 

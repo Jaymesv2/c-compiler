@@ -9,7 +9,6 @@ import Compiler.Parser.Tokens
 --data ParseError = ParseError
 }
 
-%name clike TranslationUnit
 %error {parseError}
 %monad {Alex} {>>=} {return }
 %lexer {(alexMonadScan >>=)} {EOF}
@@ -92,7 +91,25 @@ import Compiler.Parser.Tokens
     '.'     { Dot }
     ':'     { Colon}
 
+    '++'    { PlusPlus }
+    '--'    { MinusMinus }
+    '?'     { Question  }
+    '...'   { Variadic  }
+    '*='    { TimesAssign }
+    '/='    { DivAssign}
+    '%='    { ModAssign}
+    '+='    { PlusAssign}
+    '-='    { MinusAssign}
+    '<<='   { LShiftAssign}
+    '>>='   { RShiftAssign}
+    '&='    { AndAssign}
+    '^='    { XorAssign}
+    '|='    { OrAssign}
+    '#'     { Stringize }
+    '##'    { TokenPaste}
 
+
+%name clike TranslationUnit
 %name expr Expr
 -- %name declaration Declaration
 -- 
@@ -142,16 +159,23 @@ PostfixExpr : PrimaryExpr               { $1 :: Expr }
 
             | PostfixExpr '.' ident             { (DotE $1 $3) :: Expr }
             | PostfixExpr '->' ident            { (ArrowE $1 $3) :: Expr }
+            | PostfixExpr '++'                  { (UnaryE UPostIncr $1) :: Expr}
+            | PostfixExpr '--'                  { (UnaryE UPostDecr $1) :: Expr}
             -- evil type casts :/
-            --| '(' ident ')' '{' InitializerList '}'
-            --| '(' ident ')' '{' InitializerList ',' '}'
+            -- | '(' ident ')' '{' InitializerList '}'
+            -- | '(' ident ')' '{' InitializerList ',' '}'
 
 UnaryOp     : '&' { URef }
             | '*' { UDeref }
             | '~' { UCompliment }
             | '!' { UNot }
+            | '+' { UPlus }
+            | '-' { UMinus }
+
 
 UnaryExpr   : PostfixExpr               { $1 :: Expr }
+            | '++' UnaryExpr            { UnaryE UPreIncr $2}
+            | '--' UnaryExpr            { UnaryE UPreDecr $2}
             | UnaryOp CastExpr         { UnaryE $1 $2 }
             | sizeof UnaryExpr          { UnaryE USizeof $2 }
             | sizeof '(' TypeName ')'      { SizeofTypeE $3 }
@@ -201,10 +225,25 @@ LOrExpr     : LAndExpr                  { $1 :: Expr }
 
 -- could add ternary operator here
 ConditionalExpr : LOrExpr           { $1 :: Expr }
+                | LOrExpr '?' Expr ':' ConditionalExpr { ConditionalExpr $1 $3 $5 :: Expr}
+
+AssignmentOperator  : '*='  { ATimesAssign}
+                    | '/='  { ADivAssign}
+                    | '%='  { AModAssign}
+                    | '+='  { APlusAssign}
+                    | '-='  { AMinusAssign}
+                    | '<<=' { ALShiftAssign}
+                    | '>>=' { ARShiftAssign}
+                    | '&='  { AAndAssign}
+                    | '^='  { AXorAssign}
+                    | '|='  { AOrAssign}
 
 -- Expr
 AssignmentExpr  : ConditionalExpr                       { ($1 :: Expr) }
-                | AssignmentExpr '=' ConditionalExpr    { (AssignE $1 $3) :: Expr }
+                | AssignmentExpr '=' ConditionalExpr    { (SimpleAssignE $1 $3) :: Expr }
+                | AssignmentExpr AssignmentOperator ConditionalExpr    { (CompoundAssignE $1 $2 $3) :: Expr }
+
+
 
 -- Gives [ Expr ]   WILL BE REVERSED
 ArgExprList : AssignmentExpr                        { [ $1 ] }

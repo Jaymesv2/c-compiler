@@ -17,7 +17,7 @@ main = do
   -- let x = "int i;" -- works
   -- let x = "struct x {};"
 
-  --let x = "int func(int i) { int i; }"
+  -- let x = "int func(int i) { int i; }"
   {-
   let plist = "int i"
   let tokens = alexScanTokens plist
@@ -28,11 +28,11 @@ main = do
   let tokens = alexScanTokens decl
   let tree = directDeclarator tokens
   -}
-  --let x = "int main(int argc, char** argv) { println(\"hello world\\n\"); }"
+  -- let x = "int main(int argc, char** argv) { println(\"hello world\\n\"); }"
   let x = "typedef struct j { int i; long q; } j_t; int main(int argc, char **argv) { println(\"hello world\");}"
-  --let tokens = alexScanTokens x
-  --let tree = clike tokens
-  let tree =  runAlex x clike
+  -- let tokens = alexScanTokens x
+  -- let tree = clike tokens
+  let tree = runAlex x clike
   print $ tree
  where
   t1 = do
