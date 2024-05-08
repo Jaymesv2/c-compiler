@@ -3,7 +3,8 @@ module Compiler.Parser.Grammar where
 
 import Compiler.Parser.Lexer
 
-import Compiler.AST
+import Compiler.Parser.ParseTree
+import Compiler.Parser.Tokens
 
 --data ParseError = ParseError
 }

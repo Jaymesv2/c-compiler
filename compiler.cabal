@@ -111,10 +111,12 @@ common shared
 executable compiler
   import:  shared
   main-is: Main.hs
-  exposed-modules:
-    Compiler.Parser.Span
+  --exposed-modules:
   other-modules:
-    Compiler.AST
+    --Compiler.Parser.Span
+    Compiler.Parser.Tokens
+    Compiler.Parser.ParseTree
+    Compiler.Parser.Monad
     Compiler.Parser.Lexer
     Compiler.Parser.Grammar
-    -- Compiler.Parser.Monad
+    Compiler.AST

@@ -1,19 +1,25 @@
 {
 module Compiler.Parser.Lexer (alexMonadScan, runAlex, alexEOF, Alex, AlexUserState(..)) where
+
+import Control.Applicative as App (Applicative (..))
+import Data.Maybe
+import Data.Functor
+import Data.Text qualified
+import Data.Word (Word8)
+
+import Data.Bits qualified
+import Data.Char (ord)
+
+
 import qualified Data.Text as T
 import qualified Data.List as L
 import qualified Data.Map as M
-import Data.Maybe
-import Data.Functor
 
-import Compiler.AST 
+
+import Compiler.Parser.Tokens
+
+import Compiler.Parser.Monad
 }
-
-%wrapper "monadUserState-strict-text"
-
--- %encoding "latin-1"
-
--- %wrapper "strict-text"
 
 $digit = [0-9]    -- digits
 $nzdigit = [1-9]
@@ -107,8 +113,42 @@ tokens :-
 alexEOF :: Alex Token
 alexEOF = pure EOF
 
-data AlexUserState = AlexUserState [M.Map T.Text ()]
 
-alexInitUserState :: AlexUserState
-alexInitUserState = AlexUserState [M.empty]
+
+
+alexMonadScan = do
+    inp__ <- alexGetInput
+    sc <- alexGetStartCode
+    case alexScan inp__ sc of
+        AlexEOF -> alexEOF
+        AlexError ((AlexPn _ line column), _, _, _) -> alexError $ "lexical error at line " ++ (show line) ++ ", column " ++ (show column)
+        AlexSkip inp__' _len -> do
+            alexSetInput inp__'
+            alexMonadScan
+        AlexToken inp__' len action -> do
+            alexSetInput inp__'
+            action (ignorePendingBytes inp__) len
+
+-- -----------------------------------------------------------------------------
+-- Useful token actions
+
+type AlexAction result = AlexInput -> Int -> Alex result
+
+-- just ignore this token and scan another one
+-- skip :: AlexAction result
+skip _input _len = alexMonadScan
+
+-- ignore this token, but set the start code to a new value
+-- begin :: Int -> AlexAction result
+begin code _input _len = do alexSetStartCode code; alexMonadScan
+
+-- perform an action for this token, and set the start code to a new value
+andBegin :: AlexAction result -> Int -> AlexAction result
+(action `andBegin` code) input__ len = do
+    alexSetStartCode code
+    action input__ len
+
+token :: (AlexInput -> Int -> token) -> AlexAction token
+token t input__ len = return (t input__ len)
+
 }
