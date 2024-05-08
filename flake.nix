@@ -124,6 +124,7 @@
           ];
           nativeBuildInputs = with pkgs; [
             just
+            csmith
           ];
         };
       };
