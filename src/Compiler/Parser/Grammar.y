@@ -155,136 +155,136 @@ TranslationUnit     : TranslationUnitI   {(reverse $1) :: TranslationUnit}
 TranslationUnitI    : ExternalDeclaration                    { [ $1 ] :: TranslationUnit }
                     | TranslationUnitI ExternalDeclaration   { ($2 : $1) :: TranslationUnit }
 
-PrimaryExpr : ident         { (EIdent $1) :: Expr }
-            | constant      { (EConstant $1) :: Expr}
-            | stringlit       { (EStringLiteral $1) :: Expr }
-            | '(' Expr ')'  { $2 :: Expr }
+PrimaryExpr : ident         { EIdent $1         :: Expr }
+            | constant      { EConstant $1      :: Expr}
+            | stringlit     { EStringLiteral $1 :: Expr }
+            | '(' Expr ')'  { $2                :: Expr }
 
 
-PostfixExpr : PrimaryExpr               { $1 :: Expr }
+PostfixExpr : PrimaryExpr               { $1                :: Expr }
             | PostfixExpr '[' Expr ']'  { (Bracketed $1 $3) :: Expr }
 
             -- prob a better way to do this 
-            | PostfixExpr '(' ')'               { (Called $1 []) :: Expr }
-            | PostfixExpr '(' ArgExprList ')'   { (Called $1 ( reverse $3 )) :: Expr }
+            | PostfixExpr '(' ')'               { Called $1 []              :: Expr }
+            | PostfixExpr '(' ArgExprList ')'   { Called $1 (reverse $3)    :: Expr }
 
-            | PostfixExpr '.' ident             { (DotE $1 $3) :: Expr }
-            | PostfixExpr '->' ident            { (ArrowE $1 $3) :: Expr }
-            | PostfixExpr '++'                  { (UnaryE UPostIncr $1) :: Expr}
-            | PostfixExpr '--'                  { (UnaryE UPostDecr $1) :: Expr}
+            | PostfixExpr '.' ident             { (DotE $1 $3)          :: Expr }
+            | PostfixExpr '->' ident            { (ArrowE $1 $3)        :: Expr }
+            | PostfixExpr '++'                  { (UnaryE UPostIncr $1) :: Expr }
+            | PostfixExpr '--'                  { (UnaryE UPostDecr $1) :: Expr }
             -- evil type casts :/
             -- | '(' ident ')' '{' InitializerList '}'
             -- | '(' ident ')' '{' InitializerList ',' '}'
 
-UnaryOp     : '&' { URef }
-            | '*' { UDeref }
-            | '~' { UCompliment }
-            | '!' { UNot }
-            | '+' { UPlus }
-            | '-' { UMinus }
+UnaryOp     : '&' { URef        :: UnaryOp }
+            | '*' { UDeref      :: UnaryOp }
+            | '~' { UCompliment :: UnaryOp }
+            | '!' { UNot        :: UnaryOp }
+            | '+' { UPlus       :: UnaryOp }
+            | '-' { UMinus      :: UnaryOp }
 
 
-UnaryExpr   : PostfixExpr               { $1 :: Expr }
-            | '++' UnaryExpr            { UnaryE UPreIncr $2}
-            | '--' UnaryExpr            { UnaryE UPreDecr $2}
-            | UnaryOp CastExpr         { UnaryE $1 $2 }
-            | sizeof UnaryExpr          { UnaryE USizeof $2 }
-            | sizeof '(' TypeName ')'      { SizeofTypeE $3 }
+UnaryExpr   : PostfixExpr               { $1                    :: Expr }
+            | '++' UnaryExpr            { UnaryE UPreIncr $2    :: Expr }
+            | '--' UnaryExpr            { UnaryE UPreDecr $2    :: Expr }
+            | UnaryOp CastExpr          { UnaryE $1 $2          :: Expr }
+            | sizeof UnaryExpr          { UnaryE USizeof $2     :: Expr }
+            | sizeof '(' TypeName ')'   { SizeofTypeE $3        :: Expr }
 
-CastExpr    : UnaryExpr                 { $1 :: Expr }
-            | '(' TypeName ')' CastExpr    { CastE $2 $4 }
+CastExpr    : UnaryExpr                 { $1            :: Expr }
+            | '(' TypeName ')' CastExpr { CastE $2 $4   :: Expr}
 
-MultiplicativeExpr  : CastExpr                          { $1 :: Expr } 
-                    | MultiplicativeExpr '*' CastExpr   { BinaryOp $1 BMul $3 }
-                    | MultiplicativeExpr '/' CastExpr   { BinaryOp $1 BDiv $3 }
-                    | MultiplicativeExpr '%' CastExpr   { BinaryOp $1 BMod $3 }
+MultiplicativeExpr  : CastExpr                          { $1                    :: Expr } 
+                    | MultiplicativeExpr '*' CastExpr   { BinaryOp $1 BMul $3   :: Expr }
+                    | MultiplicativeExpr '/' CastExpr   { BinaryOp $1 BDiv $3   :: Expr }
+                    | MultiplicativeExpr '%' CastExpr   { BinaryOp $1 BMod $3   :: Expr }
 
-AdditiveExpr    : MultiplicativeExpr                    { $1 :: Expr }
-                | AdditiveExpr '+' MultiplicativeExpr   { BinaryOp $1 BAdd $3 }
-                | AdditiveExpr '-' MultiplicativeExpr   { BinaryOp $1 BSub $3 }
+AdditiveExpr    : MultiplicativeExpr                    { $1                    :: Expr }
+                | AdditiveExpr '+' MultiplicativeExpr   { BinaryOp $1 BAdd $3   :: Expr }
+                | AdditiveExpr '-' MultiplicativeExpr   { BinaryOp $1 BSub $3   :: Expr }
 
-ShiftExpr   : AdditiveExpr                              { $1 :: Expr }
-            | ShiftExpr '<<' AdditiveExpr               { BinaryOp $1 BShiftL $3}
-            | ShiftExpr '>>' AdditiveExpr               { BinaryOp $1 BShiftR $3}
+ShiftExpr   : AdditiveExpr                              { $1                        :: Expr }
+            | ShiftExpr '<<' AdditiveExpr               { BinaryOp $1 BShiftL $3    :: Expr }
+            | ShiftExpr '>>' AdditiveExpr               { BinaryOp $1 BShiftR $3    :: Expr }
 
-RelationalExpr  : ShiftExpr                             { $1 :: Expr}
-                | RelationalExpr '<' ShiftExpr          { BinaryOp $1 Blt $3 }
-                | RelationalExpr '>' ShiftExpr          { BinaryOp $1 Bgt $3 }
-                | RelationalExpr '<=' ShiftExpr         { BinaryOp $1 Ble $3 }
-                | RelationalExpr '>=' ShiftExpr         { BinaryOp $1 Bge $3 }
+RelationalExpr  : ShiftExpr                             { $1                    :: Expr }
+                | RelationalExpr '<' ShiftExpr          { BinaryOp $1 Blt $3    :: Expr }
+                | RelationalExpr '>' ShiftExpr          { BinaryOp $1 Bgt $3    :: Expr }
+                | RelationalExpr '<=' ShiftExpr         { BinaryOp $1 Ble $3    :: Expr }
+                | RelationalExpr '>=' ShiftExpr         { BinaryOp $1 Bge $3    :: Expr }
 
-EqualityExpr    : RelationalExpr                        { $1 ::Expr }
-                | EqualityExpr '==' RelationalExpr      { BinaryOp $1 Beq $3 }
-                | EqualityExpr '!=' RelationalExpr      { BinaryOp $1 Bneq $3 }
+EqualityExpr    : RelationalExpr                        { $1                    :: Expr }
+                | EqualityExpr '==' RelationalExpr      { BinaryOp $1 Beq $3    :: Expr }
+                | EqualityExpr '!=' RelationalExpr      { BinaryOp $1 Bneq $3   :: Expr }
 
-AndExpr : EqualityExpr                                  { $1 :: Expr }
-        | AndExpr '&' EqualityExpr                      {BinaryOp $1 BBitAnd $3 }
+AndExpr : EqualityExpr                                  { $1                    :: Expr }
+        | AndExpr '&' EqualityExpr                      {BinaryOp $1 BBitAnd $3 :: Expr }
 
-XorExpr : AndExpr                                       { $1 :: Expr }
-        | XorExpr '^' AndExpr                           {BinaryOp $1 BBitXor $3 }
+XorExpr : AndExpr                                       { $1                    :: Expr }
+        | XorExpr '^' AndExpr                           {BinaryOp $1 BBitXor $3 :: Expr }
 
-OrExpr  : XorExpr                                       { $1 :: Expr}
-        | OrExpr '|' XorExpr                            {BinaryOp $1 BBitOr $3 }
-
--- Expr
-LAndExpr    : OrExpr                { $1 :: Expr }
-            | LAndExpr  '&&' OrExpr { (BinaryOp $1 BLogicalAnd $3) :: Expr }
+OrExpr  : XorExpr                                       { $1                    :: Expr }
+        | OrExpr '|' XorExpr                            {BinaryOp $1 BBitOr $3  :: Expr }
 
 -- Expr
-LOrExpr     : LAndExpr                  { $1 :: Expr }
-            | LOrExpr '||' LAndExpr     { (BinaryOp $1 BLogicalOr $3) :: Expr }
+LAndExpr    : OrExpr                { $1                            :: Expr }
+            | LAndExpr  '&&' OrExpr { BinaryOp $1 BLogicalAnd $3    :: Expr }
+
+-- Expr
+LOrExpr     : LAndExpr                  { $1                        :: Expr }
+            | LOrExpr '||' LAndExpr     { BinaryOp $1 BLogicalOr $3 :: Expr }
 
 -- could add ternary operator here
-ConditionalExpr : LOrExpr           { $1 :: Expr }
-                | LOrExpr '?' Expr ':' ConditionalExpr { ConditionalExpr $1 $3 $5 :: Expr}
+ConditionalExpr : LOrExpr                               { $1                        :: Expr }
+                | LOrExpr '?' Expr ':' ConditionalExpr  { ConditionalExpr $1 $3 $5  :: Expr}
 
-AssignmentOperator  : '*='  { ATimesAssign}
-                    | '/='  { ADivAssign}
-                    | '%='  { AModAssign}
-                    | '+='  { APlusAssign}
-                    | '-='  { AMinusAssign}
-                    | '<<=' { ALShiftAssign}
-                    | '>>=' { ARShiftAssign}
-                    | '&='  { AAndAssign}
-                    | '^='  { AXorAssign}
-                    | '|='  { AOrAssign}
+AssignmentOperator  : '*='  { ATimesAssign  :: AssignmentOp }
+                    | '/='  { ADivAssign    :: AssignmentOp }
+                    | '%='  { AModAssign    :: AssignmentOp }
+                    | '+='  { APlusAssign   :: AssignmentOp }
+                    | '-='  { AMinusAssign  :: AssignmentOp }
+                    | '<<=' { ALShiftAssign :: AssignmentOp }
+                    | '>>=' { ARShiftAssign :: AssignmentOp }
+                    | '&='  { AAndAssign    :: AssignmentOp }
+                    | '^='  { AXorAssign    :: AssignmentOp }
+                    | '|='  { AOrAssign     :: AssignmentOp }
 
 -- Expr
-AssignmentExpr  : ConditionalExpr                       { ($1 :: Expr) }
-                | AssignmentExpr '=' ConditionalExpr    { (SimpleAssignE $1 $3) :: Expr }
-                | AssignmentExpr AssignmentOperator ConditionalExpr    { (CompoundAssignE $1 $2 $3) :: Expr }
+AssignmentExpr  : ConditionalExpr                                   { $1                        :: Expr }
+                | AssignmentExpr '=' ConditionalExpr                { SimpleAssignE $1 $3       :: Expr }
+                | AssignmentExpr AssignmentOperator ConditionalExpr { CompoundAssignE $1 $2 $3  :: Expr }
 
 
 
 -- Gives [ Expr ]   WILL BE REVERSED
-ArgExprList : AssignmentExpr                        { [ $1 ] }
-            | ArgExprList ',' AssignmentExpr        { $3 : $1 }
+ArgExprList : AssignmentExpr                        { [ $1 ]    :: [Expr] }
+            | ArgExprList ',' AssignmentExpr        { $3 : $1   :: [Expr] }
             --| {- empty -}       { [] }
 
-Expr    : AssignmentExpr { $1 }
-        | Expr ',' AssignmentExpr { CommaE $1 $3 }
+Expr    : AssignmentExpr            { $1            :: Expr }
+        | Expr ',' AssignmentExpr   { CommaE $1 $3  :: Expr }
 
 
 -- should be evaluated at translation time
 -- no increment, decrement, function calls, comma ops, unless they are in an unevaluated subexpression
-ConstExpr   : ConditionalExpr   { $1 }
+ConstExpr   : ConditionalExpr   { $1 :: Expr }
 
-Declaration : DeclarationSpecifiers InitDeclarationList ';' { (Declaration ($1 :: [DeclarationSpecifiers]) (Just ((reverse $2) :: [InitDeclaration]))) :: Declaration }
-            | DeclarationSpecifiers ';'                     { (Declaration ($1 :: [DeclarationSpecifiers]) Nothing ) :: Declaration }
+Declaration : DeclarationSpecifiers InitDeclarationList ';' { Declaration $1 (Just ((reverse $2) :: [InitDeclaration])) :: Declaration }
+            | DeclarationSpecifiers ';'                     { Declaration $1  Nothing :: Declaration }
 
 -- page 97
 
 -- Declarations 
 
 
-DeclarationSpecifiers   : StorageClassSpecifier DeclarationSpecifiers   { ((DSStorageSpec $1):$2) :: [DeclarationSpecifiers] }
-                        | StorageClassSpecifier                         { ([DSStorageSpec $1]   ) :: [DeclarationSpecifiers] }
-                        | TypeSpecifier DeclarationSpecifiers           { ((DSTypeSpec $1):$2   ) :: [DeclarationSpecifiers] }
-                        | TypeSpecifier                                 { ([DSTypeSpec $1]      ) :: [DeclarationSpecifiers] }
-                        | TypeQualifier DeclarationSpecifiers           { ((DSTypeQual $1):$2   ) :: [DeclarationSpecifiers] }
-                        | TypeQualifier                                 { ([DSTypeQual $1]      ) :: [DeclarationSpecifiers] }
-                        | FunctionSpecifier DeclarationSpecifiers       { ((DSFuncSpec $1):$2   ) :: [DeclarationSpecifiers] }
-                        | FunctionSpecifier                             { ([DSFuncSpec $1]      ) :: [DeclarationSpecifiers] }
+DeclarationSpecifiers   : StorageClassSpecifier DeclarationSpecifiers   { (DSStorageSpec $1):$2 :: [DeclarationSpecifiers] }
+                        | StorageClassSpecifier                         { [DSStorageSpec $1]    :: [DeclarationSpecifiers] }
+                        | TypeSpecifier DeclarationSpecifiers           { (DSTypeSpec $1):$2    :: [DeclarationSpecifiers] }
+                        | TypeSpecifier                                 { [DSTypeSpec $1]       :: [DeclarationSpecifiers] }
+                        | TypeQualifier DeclarationSpecifiers           { (DSTypeQual $1):$2    :: [DeclarationSpecifiers] }
+                        | TypeQualifier                                 { [DSTypeQual $1]       :: [DeclarationSpecifiers] }
+                        | FunctionSpecifier DeclarationSpecifiers       { (DSFuncSpec $1):$2    :: [DeclarationSpecifiers] }
+                        | FunctionSpecifier                             { [DSFuncSpec $1]       :: [DeclarationSpecifiers] }
 
 
 InitDeclarationList : InitDeclarator { [ $1 ] } 
@@ -295,44 +295,44 @@ InitDeclarator  : Declarator                    { UninitDeclaration $1 }
 
 
 -- page 98
-StorageClassSpecifier   : typedef   { SCTypedef }
-                        | extern    { SCExtern }
-                        | static    { SCStatic }
-                        | auto      { SCAuto }
-                        | register  { SCRegister}
+StorageClassSpecifier   : typedef   { SCTypedef     :: StorageClassSpecifier }
+                        | extern    { SCExtern      :: StorageClassSpecifier }
+                        | static    { SCStatic      :: StorageClassSpecifier }
+                        | auto      { SCAuto        :: StorageClassSpecifier }
+                        | register  { SCRegister    :: StorageClassSpecifier }
 
     -- this needs to have the standard types and stuf
 -- page 99
-TypeSpecifier  : void           { PrimType PVoid }
-                | char          { PrimType PChar }
-                | short         { PrimType PShort }
-                | int           { PrimType PInt }
-                | long          { PrimType PLong }
-                | float         { PrimType PFloat }
-                | double        { PrimType PDouble }
-                | signed        { PrimType PSigned }
-                | unsigned      { PrimType PUnsigned }
-                | uBool         { PrimType PuBool }
-                | uComplex      { PrimType PuComplex }
-                | uImaginary    { PrimType PuImaginary }
-                | StructOrUnionSpecifier    {StructType $1 }
-                | EnumSpecifier              {EnumType $1 }
-                | TypedefName       { IdentType $1 }
+TypeSpecifier  : void                       { PrimType PVoid        :: TypeSpecifier }
+                | char                      { PrimType PChar        :: TypeSpecifier }
+                | short                     { PrimType PShort       :: TypeSpecifier }
+                | int                       { PrimType PInt         :: TypeSpecifier }
+                | long                      { PrimType PLong        :: TypeSpecifier }
+                | float                     { PrimType PFloat       :: TypeSpecifier }
+                | double                    { PrimType PDouble      :: TypeSpecifier }
+                | signed                    { PrimType PSigned      :: TypeSpecifier }
+                | unsigned                  { PrimType PUnsigned    :: TypeSpecifier }
+                | uBool                     { PrimType PuBool       :: TypeSpecifier }
+                | uComplex                  { PrimType PuComplex    :: TypeSpecifier }
+                | uImaginary                { PrimType PuImaginary  :: TypeSpecifier }
+                | StructOrUnionSpecifier    { StructType $1         :: TypeSpecifier }
+                | EnumSpecifier             { EnumType $1           :: TypeSpecifier }
+                | TypedefName               { IdentType $1          :: TypeSpecifier }
 -- page 108
-TypeQualifier   : const         { TQConst }
-                | restrict      { TQRestrict }
-                | volatile      { TQVolatile }
+TypeQualifier   : const         { TQConst       :: TypeQualifier }
+                | restrict      { TQRestrict    :: TypeQualifier }
+                | volatile      { TQVolatile    :: TypeQualifier }
 
 -- page 112
-FunctionSpecifier   : inline    { FSInline }
+FunctionSpecifier   : inline    { FSInline :: FunctionSpecifier }
 -- page 101
 -- might merge these two rules into 1 with 6 rules
-StructOrUnionSpecifier  : StructOrUnion ident '{' StructDeclarationList '}' { DataLayoutSpec ($1 :: StructOrUnion) (Just ($2 :: Identifier)) (Just ((reverse $4) :: [StructDeclaration])) }
-                        | StructOrUnion  '{' StructDeclarationList '}'      { DataLayoutSpec ($1 :: StructOrUnion) Nothing (Just (reverse $3)) }
-                        | StructOrUnion ident                               { DataLayoutSpec ($1 :: StructOrUnion) (Just ($2 :: Identifier)) Nothing }
+StructOrUnionSpecifier  : StructOrUnion ident '{' StructDeclarationList '}' { DataLayoutSpec $1 (Just $2) (Just ((reverse $4) :: [StructDeclaration])) :: DataLayoutSpec}
+                        | StructOrUnion  '{' StructDeclarationList '}'      { DataLayoutSpec $1 Nothing (Just (reverse $3)) :: DataLayoutSpec }
+                        | StructOrUnion ident                               { DataLayoutSpec $1 (Just $2) Nothing :: DataLayoutSpec }
 
-StructOrUnion           : struct    { SUStruct }
-                        | union     { SUUnion }
+StructOrUnion           : struct    { SUStruct :: StructOrUnion }
+                        | union     { SUUnion  :: StructOrUnion }
 
 
 StructDeclarationList   : StructDeclaration                         { [ $1 ] :: [StructDeclaration]  }
@@ -341,7 +341,7 @@ StructDeclarationList   : StructDeclaration                         { [ $1 ] :: 
 --StructDeclaration       : SpecifierQualifierList StructDeclarator { StructDeclaration $1 ([$2] :: [StructDeclarator]) }
 
 
-StructDeclaration       : SpecifierQualifierList StructDeclaratorList ';' { StructDeclaration $1 (reverse $2 :: [StructDeclarator]) }
+StructDeclaration       : SpecifierQualifierList StructDeclaratorList ';' { StructDeclaration $1 (reverse $2 :: [StructDeclarator]) :: StructDeclaration }
 
 StructDeclaratorList    : StructDeclarator                              { [ $1 ] :: [StructDeclarator] }
                         | StructDeclaratorList ',' StructDeclarator   { ($3 : $1) :: [StructDeclarator] }
@@ -349,10 +349,10 @@ StructDeclaratorList    : StructDeclarator                              { [ $1 ]
 
 SpecifierQualifierList  : SpecifierQualifierListI { (reverse $1) :: [SpecifierQualifier] }
 
-SpecifierQualifierListI : TypeSpecifier SpecifierQualifierListI { (Left $1) : $2 }
-                        | TypeQualifier SpecifierQualifierListI { (Right $1) : $2 }
-                        | TypeSpecifier { [ Left $1 ] }
-                        | TypeQualifier { [ Right $1 ] }
+SpecifierQualifierListI : TypeSpecifier SpecifierQualifierListI { (Left $1) : $2    :: [SpecifierQualifier] }
+                        | TypeQualifier SpecifierQualifierListI { (Right $1) : $2   :: [SpecifierQualifier] }
+                        | TypeSpecifier                         { [ Left $1 ]       :: [SpecifierQualifier] }
+                        | TypeQualifier                         { [ Right $1 ]      :: [SpecifierQualifier] }
 
 -- unfinished
 StructDeclarator        : Declarator            { (StructDeclarator ($1 :: Declarator) Nothing) :: StructDeclarator }
@@ -361,29 +361,28 @@ StructDeclarator        : Declarator            { (StructDeclarator ($1 :: Decla
                         -- I could support bitfields but I dont really want to :/
 
 -- page 104
-EnumSpecifier   : enum ident '{' EnumeratorList '}'     { EnumSpecifier (Just $2) $4 }
-                | enum  '{' EnumeratorList '}'          { EnumSpecifier Nothing $3 }
-                | enum ident '{' EnumeratorList ',' '}' { EnumSpecifier (Just $2) $4 }
-                | enum '{' EnumeratorList ',' '}'       { EnumSpecifier Nothing $3 }
-                | enum ident                            { EnumForwardRef $2  }
+EnumSpecifier   : enum ident '{' EnumeratorList '}'     { EnumSpecifier (Just $2) $4    :: EnumSpecifier }
+                | enum  '{' EnumeratorList '}'          { EnumSpecifier Nothing $3      :: EnumSpecifier }
+                | enum ident '{' EnumeratorList ',' '}' { EnumSpecifier (Just $2) $4    :: EnumSpecifier }
+                | enum '{' EnumeratorList ',' '}'       { EnumSpecifier Nothing $3      :: EnumSpecifier }
+                | enum ident                            { EnumForwardRef $2             :: EnumSpecifier }
 
 -- little hack for the list building
-EnumeratorList  :   EnumeratorListI { reverse $1 }
+EnumeratorList  :   EnumeratorListI { reverse $1                :: [(Identifier, Maybe Expr)] }
+EnumeratorListI : Enumerator                        { [ $1 ]    :: [(Identifier, Maybe Expr)] }
+                | EnumeratorListI ',' Enumerator    { $3 : $1   :: [(Identifier, Maybe Expr)] }
 
-EnumeratorListI : Enumerator                        { [ $1 ]}
-                | EnumeratorListI ',' Enumerator    { $3 : $1 }
-
-Enumerator      : EnumerationConstant             { ($1, Nothing) }
-                | EnumerationConstant '=' Expr    { ($1, Just $3) }
+Enumerator      : EnumerationConstant             { ($1, Nothing) :: (Identifier, Maybe Expr) }
+                | EnumerationConstant '=' Expr    { ($1, Just $3) :: (Identifier, Maybe Expr) }
                                     -- this needs to be a "constant" expression
 
-EnumerationConstant : ident { $1 }
+EnumerationConstant : ident { $1 :: Identifier }
 
 -- Page 114
-Declarator  : Pointer DirectDeclarator      { Declarator (Just $1) $2 }
-            | DirectDeclarator              { Declarator Nothing $1 }
+Declarator  : Pointer DirectDeclarator      { Declarator (Just $1) $2 :: Declarator }
+            | DirectDeclarator              { Declarator Nothing $1   :: Declarator }
 
-DirectDeclarator        : ident                                                             { DDIdent $1 }
+DirectDeclarator        : ident                                                             { DDIdent $1 :: DirectDeclarator }
                         -- array declarations
                         | DirectDeclarator '[' TypeQualifierList AssignmentExpr ']'         { ( DDArr $1 False $3 (Just $4) False) :: DirectDeclarator }
                         | DirectDeclarator '[' TypeQualifierList '*' ']'                    { ( DDArr $1 False $3 Nothing   True ) :: DirectDeclarator }       
@@ -395,80 +394,80 @@ DirectDeclarator        : ident                                                 
                         | DirectDeclarator '[' '*' ']'                                      { ( DDArr $1 False [] Nothing   True ) :: DirectDeclarator }     
                         | DirectDeclarator '[' ']'                                          { ( DDArr $1 False [] Nothing   False) :: DirectDeclarator }
                         -- function declarations
-                        | '(' Declarator ')'                                                { DDRec $2 }
-                        | DirectDeclarator '(' ParameterTypeList ')'                        { ( DDFuncPList   $1 $3  ) :: DirectDeclarator }     
-                        | DirectDeclarator '(' IdentifierList ')'                           { ( DDFuncIList $1 $3) :: DirectDeclarator }    
-                        | DirectDeclarator '(' ')'                                          { ( DDFuncIList $1 []) :: DirectDeclarator }   
+                        | '(' Declarator ')'                                                { DDRec $2                  :: DirectDeclarator }
+                        | DirectDeclarator '(' ParameterTypeList ')'                        { ( DDFuncPList   $1 $3  )  :: DirectDeclarator }     
+                        | DirectDeclarator '(' IdentifierList ')'                           { ( DDFuncIList $1 $3)      :: DirectDeclarator }    
+                        | DirectDeclarator '(' ')'                                          { ( DDFuncIList $1 [])      :: DirectDeclarator }   
                                                                             
                                                                             
 -- declarators
 Pointer                 : '*' TypeQualifierList Pointer { (Pointer $2 (Just $3)) :: Pointer }
-                        | '*' TypeQualifierList         { (Pointer $2 Nothing) :: Pointer }
+                        | '*' TypeQualifierList         { (Pointer $2 Nothing)   :: Pointer }
                         | '*' Pointer                   { (Pointer [] (Just $2)) :: Pointer}
-                        | '*'                           { (Pointer [] Nothing) :: Pointer }
+                        | '*'                           { (Pointer [] Nothing)   :: Pointer }
 
-TypeQualifierList       : TypeQualifierListI { reverse $1 }
-TypeQualifierListI      : TypeQualifier { [ $1 ] }
-                        | TypeQualifierListI TypeQualifier { $2 : $1 }
+TypeQualifierList       : TypeQualifierListI                { reverse $1 :: [TypeQualifier] }
+TypeQualifierListI      : TypeQualifier                     { [ $1 ]     :: [TypeQualifier] }
+                        | TypeQualifierListI TypeQualifier  { $2 : $1    :: [TypeQualifier] }
 
-ParameterTypeList       : ParameterList                 { reverse $1 }
+ParameterTypeList       : ParameterList                 { reverse $1 :: [ParameterDeclaration] }
 --                      | ParameterList ',' '...'       {  }
 
-ParameterList           : ParameterDeclaration                      { [ $1 ] }
-                        | ParameterList ',' ParameterDeclaration    { $3 : $1 }
+ParameterList           : ParameterDeclaration                      { [ $1 ]  :: [ParameterDeclaration] }
+                        | ParameterList ',' ParameterDeclaration    { $3 : $1 :: [ParameterDeclaration] }
 
 ParameterDeclaration    : DeclarationSpecifiers Declarator          { (ParameterDeclaration $1 $2 ) :: ParameterDeclaration}
                         | DeclarationSpecifiers AbstractDeclarator  { (AbsParameterDeclaration $1 $2 ) :: ParameterDeclaration}
 
-IdentifierList          : IdentifierListI           { reverse $1 }
-IdentifierListI         : ident                     { [ $1 ] }
-                        | IdentifierListI ',' ident { $3 : $1 }
+IdentifierList          : IdentifierListI           { reverse $1 :: [Identifier]}
+IdentifierListI         : ident                     { [ $1 ]     :: [Identifier]}
+                        | IdentifierListI ',' ident { $3 : $1    :: [Identifier]}
 
 
 
 
 -- page 122
-TypeName    : SpecifierQualifierList AbstractDeclarator {TypeName $1 (Just $2)}
-            | SpecifierQualifierList                    {TypeName $1 Nothing}
+TypeName    : SpecifierQualifierList AbstractDeclarator { TypeName $1 (Just $2) :: TypeName }
+            | SpecifierQualifierList                    { TypeName $1 Nothing   :: TypeName }
 
-AbstractDeclarator  : Pointer                           { ADPtr $1 }
-                    | Pointer DirectAbstractDeclarator  { ADPtrDirect $1 $2 }
-                    | DirectAbstractDeclarator          { ADDirect $1 }
+AbstractDeclarator  : Pointer                           { ADPtr $1          :: AbstractDeclarator }
+                    | Pointer DirectAbstractDeclarator  { ADPtrDirect $1 $2 :: AbstractDeclarator }
+                    | DirectAbstractDeclarator          { ADDirect $1       :: AbstractDeclarator }
 
-DirectAbstractDeclarator    : '(' AbstractDeclarator ')'                        {DADeclarator $2 }
-                            | DirectAbstractDeclarator '['  AssignmentExpr ']'  {Array (Just $1) (Just $3)}
-                            | DirectAbstractDeclarator '['  ']'                 {Array (Just $1) Nothing}
-                            | '['  AssignmentExpr ']'                           {Array Nothing (Just $2)}
-                            | '['  ']'                                          {Array Nothing Nothing}
-                            | DirectAbstractDeclarator '[' '*' ']'              {VarArray (Just $1)}
-                            | '[' '*' ']'                                       {VarArray Nothing}
-                            | DirectAbstractDeclarator '(' ParameterTypeList ')'{Parens (Just $1) $3}
-                            | DirectAbstractDeclarator '(' ')'                  {Parens (Just $1) []}
-                            | '(' ParameterTypeList ')'                         {Parens Nothing $2}
-                            | '(' ')'                                           {Parens Nothing []}
+DirectAbstractDeclarator    : '(' AbstractDeclarator ')'                        { DADeclarator $2           :: DirectAbstractDeclarator }
+                            | DirectAbstractDeclarator '['  AssignmentExpr ']'  { Array (Just $1) (Just $3) :: DirectAbstractDeclarator }
+                            | DirectAbstractDeclarator '['  ']'                 { Array (Just $1) Nothing   :: DirectAbstractDeclarator }
+                            | '['  AssignmentExpr ']'                           { Array Nothing (Just $2)   :: DirectAbstractDeclarator }
+                            | '['  ']'                                          { Array Nothing Nothing     :: DirectAbstractDeclarator }
+                            | DirectAbstractDeclarator '[' '*' ']'              { VarArray (Just $1)        :: DirectAbstractDeclarator }
+                            | '[' '*' ']'                                       { VarArray Nothing          :: DirectAbstractDeclarator }
+                            | DirectAbstractDeclarator '(' ParameterTypeList ')'{ Parens (Just $1) $3       :: DirectAbstractDeclarator }
+                            | DirectAbstractDeclarator '(' ')'                  { Parens (Just $1) []       :: DirectAbstractDeclarator }
+                            | '(' ParameterTypeList ')'                         { Parens Nothing $2         :: DirectAbstractDeclarator }
+                            | '(' ')'                                           { Parens Nothing []         :: DirectAbstractDeclarator }
                             
 -- page 123
-TypedefName : typeName { $1 }
+TypedefName : typeName { $1 :: Identifier }
 
 -- page 125
-Initializer : AssignmentExpr                { InitExpr $1 }
-            | '{' InitializerList '}'       { InitList $2 }
-            | '{' InitializerList ',' '}'   { InitList $2 }
+Initializer : AssignmentExpr                { InitExpr $1 :: Initializer }
+            | '{' InitializerList '}'       { InitList $2 :: Initializer }
+            | '{' InitializerList ',' '}'   { InitList $2 :: Initializer }
 
-InitializerList     : InitializerListI                              { reverse $1 }
-InitializerListI    : Designation Initializer                       { [ (Just $1, $2) ] }
-                    | Initializer                                   { [ (Nothing, $1 ) ] }
-                    | InitializerListI ',' Designation Initializer  { (Just $3, $4) : $1 }
-                    | InitializerListI ',' Initializer              { (Nothing, $3) : $1 }
+InitializerList     : InitializerListI                              { reverse $1            :: [(Maybe [Designator], Initializer)] }
+InitializerListI    : Designation Initializer                       { [ (Just $1, $2) ]     :: [(Maybe [Designator], Initializer)] }
+                    | Initializer                                   { [ (Nothing, $1 ) ]    :: [(Maybe [Designator], Initializer)] }
+                    | InitializerListI ',' Designation Initializer  { (Just $3, $4) : $1    :: [(Maybe [Designator], Initializer)] }
+                    | InitializerListI ',' Initializer              { (Nothing, $3) : $1    :: [(Maybe [Designator], Initializer)] }
 
-Designation     : DesignatorList '='    { $1 }
+Designation     : DesignatorList '='    { $1 :: [Designator]}
 
-DesignatorList  : DesignatorListI               { reverse $1 }
-DesignatorListI : Designator                    { [ $1 ] }
-                | DesignatorListI Designator    { $2 : $1 }
+DesignatorList  : DesignatorListI               { reverse $1    :: [Designator]}
+DesignatorListI : Designator                    { [ $1 ]        :: [Designator]}
+                | DesignatorListI Designator    { $2 : $1       :: [Designator]}
 
-Designator  : '[' ConstExpr ']'  { DesignatorExpr $2 }
-            | '.' ident     { DesignatorDot $2 }
+Designator  : '[' ConstExpr ']' { DesignatorExpr $2 :: Designator}
+            | '.' ident         { DesignatorDot $2  :: Designator}
 
 
 -- 131
@@ -493,36 +492,36 @@ BlockItem           : Declaration       { (BDecl $1) :: BlockItem }
                     | Statement         { (BStmt $1) :: BlockItem }
 
 ExpressionStatement : Expr  ';'     { (Just $1) :: Maybe Expr }
-                    | ';'           { Nothing }
+                    | ';'           { Nothing   :: Maybe Expr }
 
-SelectionStatement  : if '(' Expr ')' Statement                 { IfStmt $3 $5 Nothing }
-                    | if '(' Expr ')' Statement else Statement  { IfStmt $3 $5 (Just $7) }
-                    | switch '(' Expr ')' Statement             { SwitchStmt $3 $5 }
+SelectionStatement  : if '(' Expr ')' Statement                 { IfStmt $3 $5 Nothing      :: Statement }
+                    | if '(' Expr ')' Statement else Statement  { IfStmt $3 $5 (Just $7)    :: Statement }
+                    | switch '(' Expr ')' Statement             { SwitchStmt $3 $5          :: Statement }
 
-IterationStatement  : while '(' Expr ')' Statement          { WhileStmt $3 $5 }
-                    | do Statement while '(' Expr ')' ';'   { DoStmt $2 $5 }
+IterationStatement  : while '(' Expr ')' Statement          { WhileStmt $3 $5   :: Statement}
+                    | do Statement while '(' Expr ')' ';'   { DoStmt $2 $5      :: Statement}
                     -- lots of opts
                     --| for '()'
 
-JumpStatement       : goto ident ';'        { GotoStmt $2 }
-                    | continue ';'          { ContinueStmt }
-                    | break ';'             { BreakStmt}
-                    | return ';'            { ReturnStmt Nothing }
-                    | return Expr ';'       { ReturnStmt (Just $2) }
+JumpStatement       : goto ident ';'        { GotoStmt $2           :: Statement}
+                    | continue ';'          { ContinueStmt          :: Statement}
+                    | break ';'             { BreakStmt             :: Statement}
+                    | return ';'            { ReturnStmt Nothing    :: Statement}
+                    | return Expr ';'       { ReturnStmt (Just $2)  :: Statement}
 
 -- page 140
 
 
 
 
-DeclarationList     : Declaration                   { [ $1 ] }
-                    | DeclarationList  Declaration { $2 : $1 }
+DeclarationList     : Declaration                   { [ $1 ] :: [Declaration]}
+                    | DeclarationList  Declaration { $2 : $1 :: [Declaration]}
 
-ExternalDeclaration : FunctionDefinition    {(FunctionDef $1) :: ExternDecl }
-                    | Declaration           {(EDecl $1) :: ExternDecl   }
+ExternalDeclaration : FunctionDefinition    {(FunctionDef $1)   :: ExternDecl }
+                    | Declaration           {(EDecl $1)         :: ExternDecl   }
 
-FunctionDefinition  : DeclarationSpecifiers Declarator DeclarationList CompoundStatement {FunctionDefinition $1 $2 (Just (reverse $3)) $4}
-                    | DeclarationSpecifiers Declarator CompoundStatement    {FunctionDefinition $1 $2 Nothing $3}
+FunctionDefinition  : DeclarationSpecifiers Declarator DeclarationList CompoundStatement    {FunctionDefinition $1 $2 (Just (reverse $3)) $4 :: FunctionDefinition }
+                    | DeclarationSpecifiers Declarator CompoundStatement                    {FunctionDefinition $1 $2 Nothing $3             :: FunctionDefinition }
 
 -- page 145
 -- PREPROCESSING
@@ -551,8 +550,13 @@ catchE m k =
 
 
 {
-parseError :: Error String :> es => (Token, [String]) -> Eff es a
+--parseError :: Error String :> es => (Token, [String]) -> Eff es a
+parseError :: (Error String :> es, State AlexState :> es, State SymbolTable :> es) => (Token, [String]) -> Eff es a
 parseError (t, tokens) = error "" -- throwError "failure :("
+
+
+
+
 
 
 lexer :: (Error String :> es, State AlexState :> es, State SymbolTable :> es) =>  (Token -> Eff es a) -> Eff es a
