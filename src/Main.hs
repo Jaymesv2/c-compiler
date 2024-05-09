@@ -1,6 +1,6 @@
 module Main where
 
---import Compiler.Parser.Grammar
+import Compiler.Parser.Grammar
 import Compiler.Parser.Lexer
 
 import Data.Text.IO qualified as TIO

@@ -1,17 +1,30 @@
 {
+{-# LANGUAGE NoMonomorphismRestriction #-}
 module Compiler.Parser.Grammar where
 
-import Compiler.Parser.Lexer
+import Compiler.Parser.Lexer (alexMonadScan, AlexState)
 
 import Compiler.Parser.ParseTree
 import Compiler.Parser.Tokens
+import Compiler.Parser (SymbolTable)
 
 --data ParseError = ParseError
+
+import Effectful
+import Effectful.Error.Static
+import Effectful.State.Static.Local
+
 }
 
+%name clike TranslationUnit
+%name expr Expr
+
+%monad {(Error String :> es, State AlexState :> es, State SymbolTable :> es) }  {Eff es} {>>=} {return}
+%lexer {lexer} {EOF}
+--%lexer {(alexMonadScan >>=)} {EOF}
+
+%errorhandlertype explist
 %error {parseError}
-%monad {Alex} {>>=} {return }
-%lexer {(alexMonadScan >>=)} {EOF}
 %tokentype { Token }
 
 %token
@@ -38,7 +51,7 @@ import Compiler.Parser.Tokens
     restrict{ Restrict }
     return  { Return }
     sizeof  { Sizeof}
-    static  { Static }
+    static  { TStatic }
     struct  { Struct}
     switch  { Switch }
     typedef { TypeDef }
@@ -109,8 +122,6 @@ import Compiler.Parser.Tokens
     '##'    { TokenPaste}
 
 
-%name clike TranslationUnit
-%name expr Expr
 -- %name declaration Declaration
 -- 
 -- %name declarator Declarator
@@ -540,6 +551,13 @@ catchE m k =
 
 
 {
-parseError :: Token -> Alex a
-parseError t = error "failure :("
+parseError :: Error String :> es => (Token, [String]) -> Eff es a
+parseError (t, tokens) = error "" -- throwError "failure :("
+
+
+lexer :: (Error String :> es, State AlexState :> es, State SymbolTable :> es) =>  (Token -> Eff es a) -> Eff es a
+lexer = (alexMonadScan >>=)
+
+--parseError :: Error String :> es => Token -> Eff es a
+--parseError t = error "failure :("
 }

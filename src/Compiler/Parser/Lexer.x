@@ -1,6 +1,6 @@
 {
 -- {-# LANGUAGE NoMonomorphismRestriction #-}
-module Compiler.Parser.Lexer (alexMonadScan, runAlex, alexEOF) where
+module Compiler.Parser.Lexer (alexMonadScan, runAlex, AlexState) where
 
 import Control.Applicative as App (Applicative (..))
 import Data.Maybe
@@ -18,6 +18,7 @@ import qualified Data.Map as M
 
 
 import Compiler.Parser.Tokens
+import Compiler.Parser
 
 --import Compiler.Parser.Monad
 
@@ -248,11 +249,9 @@ tokens :-
     
 {
 
-type SymbolTable = [M.Map T.Text ()]
 
 alexInitUserState :: SymbolTable
 alexInitUserState = [M.empty]
-
 
 alexEOF :: Eff es Token
 alexEOF = pure EOF

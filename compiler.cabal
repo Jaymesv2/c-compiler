@@ -123,5 +123,6 @@ executable compiler
     Compiler.Parser.ParseTree
     Compiler.Parser.Monad
     Compiler.Parser.Lexer
-    -- Compiler.Parser.Grammar
+    Compiler.Parser
+    Compiler.Parser.Grammar
     Compiler.AST
