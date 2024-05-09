@@ -1,6 +1,6 @@
 {
 -- {-# LANGUAGE NoMonomorphismRestriction #-}
-module Compiler.Parser.Lexer (alexMonadScan, runAlex, AlexState) where
+module Compiler.Parser.Lexer (alexMonadScan, runAlex, AlexState, printTokens) where
 
 import Control.Applicative as App (Applicative (..))
 import Data.Maybe
@@ -208,17 +208,20 @@ tokens :-
         -- TODO: add a check for enum constants
 <0>  $nondigit $identnondigit* { \(_,_,_,t) i -> get @SymbolTable <&> (\(symtbl:_) -> if isJust (M.lookup t symtbl) then TTypeName (T.take i t) else Ident (T.take i t)) }
         -- integer constants
-<0>  $nzdigit $digit* @integersuffix         {\(_,_,_,t) i -> pure $ error ""}
+<0>  $nzdigit $digit* @integersuffix?         {\(_,_,_,t) i -> pure . Constant $ IntConst (T.take i t ) Decimal Signed Standard }
 
         -- octal const
-<0>  "0" $octaldigit* @integersuffix         {\(_,_,_,t) i -> pure $ error ""}
+<0>  "0" $octaldigit* @integersuffix?         {\(_,_,_,t) i -> pure . Constant $ IntConst (T.take i t) Octal Signed Standard }
         -- hex const
-<0>  @hexprefix $hexdigit* @integersuffix    {\(_,_,_,t) i -> pure $ error ""}
+<0>  @hexprefix $hexdigit* @integersuffix?    {\(_,_,_,t) i -> pure . Constant $ IntConst (T.take i t) Hex Signed Standard }
 
         -- floating constants
-<0>  @fractionalConstant @exponentialPart? $floatingsuffix? {error ""}
-<0>  $digit+ @exponentialPart $floatingsuffix? {error ""}
-<0>  @hexprefix @hexFractionalConstant @hexExponentialPart $floatingsuffix? {error ""}
+<0>  @fractionalConstant @exponentialPart? $floatingsuffix? 
+            {\(_,_,_,t) i -> pure . Constant . FloatConst $ FracFloatingConstant (Nothing, Nothing) Nothing LongDouble}
+<0>  $digit+ @exponentialPart $floatingsuffix? 
+            {\(_,_,_,t) i -> pure . Constant . FloatConst $ FracFloatingConstant (Nothing, Nothing) Nothing LongDouble}
+<0>  @hexprefix @hexFractionalConstant @hexExponentialPart $floatingsuffix? 
+            {\(_,_,_,t) i -> pure . Constant . FloatConst $ FracFloatingConstant (Nothing, Nothing) Nothing LongDouble}
 
 <0>  \" @schar+ \"              { \(_,_,_,t) i -> pure $ StringLiteral (T.take i t) }
         -- wide string literals
@@ -227,20 +230,20 @@ tokens :-
 <0>  \' @cchar+ \'          { \(_,_,_,t) i -> pure $ Constant (CharConst (T.take i t))}
 
         -- headernames
-<0>  "<" [^\n>]+ ">"              { \(_,_,_,t) i -> pure $ error "" }
-<0>  \" [^\n\"] \"           { \(_,_,_,t) i -> pure $ error "" }
+-- <0>  "<" [^\n>]+ ">"              { \(_,_,_,t) i -> pure $ error "d" }
+-- <0>  \" [^\n\"] \"           { \(_,_,_,t) i -> pure $ error "e" }
 
         -- preprocessing numbers
-<0>  "."? $digit+ (identnondigit | [eEpP] sign | ".")? {\(_,_,_,t) i -> error ""}
+-- <0>  "."? $digit+ (identnondigit | [eEpP] sign | ".")? {\(_,_,_,t) i -> error "f"}
 <0>  $white+;
         -- matche everything other than 
 <0>  "//" { begin linecomment }
 <0>  "/*" { begin blockcomment }
 
-<linecomment> [^\n]* ;  -- match non linebreaks
-<linecomment> "\n" { begin 0 } -- switch back to code
+<linecomment> [^\n]+ ;  -- match non linebreaks
+<linecomment> \n { begin 0 } -- switch back to code
 
-<blockcomment> [^\*]*; -- match everything other than *
+<blockcomment> [^\*]+; -- match everything other than *
 <blockcomment> "*" [^\/]; -- match * not followed by /
 <blockcomment> "*/" { begin 0 } -- match */
 -- { begin 0 }
@@ -274,13 +277,24 @@ data AlexState = AlexState {
 
 -- Compile with -funbox-strict-fields for best results!
 -- handle the effects here
-runAlex :: T.Text -> Eff (State AlexState ': es) a -> Eff es a
-runAlex input__ = evalState (AlexState alexStartPos input__ '\n' [] 0)
+runAlex :: T.Text -> Eff (State AlexState ': Error String ': State SymbolTable ': es) a -> Eff es (Either (CallStack, String) a)
+runAlex input__ = evalState [M.empty] . runError . evalState (AlexState alexStartPos input__ '\n' [] 0)
     {-(AlexState{alex_bytes = [], 
       alex_pos = alexStartPos, 
       alex_inp = input__,
       alex_chr = '\n',
       alex_scd = 0 } )-}
+
+
+printTokens :: (IOE :> es, State AlexState :> es, State SymbolTable :> es, Error String :> es) => Eff es ()
+printTokens = do
+    token <- alexMonadScan
+    liftIO $ print token
+    case token of
+        EOF -> pure ()
+        _ -> printTokens
+
+
 
 alexGetInput :: State AlexState :> es => Eff es AlexInput
 alexGetInput = do
@@ -315,7 +329,7 @@ alexMonadScan = do
   sc <- alexGetStartCode
   case alexScan inp__ sc of
     AlexEOF -> alexEOF
-    AlexError ((AlexPn _ line column),_,_,_) -> throwError $  "lexical error at line " ++ (show line) ++ ", column " ++ (show column)
+    AlexError ((AlexPn _ line column),_,_,_) -> throwError $ "lexical error at line " ++ (show line) ++ ", column " ++ (show column)
     AlexSkip  inp__' _len -> do
       alexSetInput inp__'
       alexMonadScan
