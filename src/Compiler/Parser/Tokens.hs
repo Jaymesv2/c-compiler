@@ -1,4 +1,4 @@
-module Compiler.Parser.Tokens (Identifier, Token (..), Constant (..)) where
+module Compiler.Parser.Tokens (Identifier, Token (..), FloatingConstant (..), Size (..), FloatSize (..), NumRep (..), Sign (..), Constant (..)) where
 
 import Data.Text qualified as T
 

@@ -8,14 +8,21 @@ import System.Environment
 
 -- import System.IO.Error
 
+import Effectful
+
 main :: IO ()
-main = do
+main =  do
   args <- getArgs
   source <- case args of
     [] -> error "Cannot find a program to parse"
     h : _ -> TIO.readFile h -- will throw exception if the file doesn't exist
-  print "hello" -- $ runAlex source clike
- where
+  --x <- runEff $ runAlex source clike
+  --let source = "//int func(int i) { int i; }"
+  -- print source
+  runEff $ runAlex source printTokens
+  pure ()
+  --print x
+ --where
   -- let x =
   --      "\
   --      \ i32 main(i32 x) { \
@@ -28,7 +35,6 @@ main = do
   -- let x = "int i;" -- works
   -- let x = "struct x {};"
 
-  -- let x = "int func(int i) { int i; }"
   {-
   let plist = "int i"
   let tokens = alexScanTokens plist
@@ -44,7 +50,7 @@ main = do
   -- let tokens = alexScanTokens x
   -- let tree = clike tokens
 
-  t1 = do
-    print "hi"
+  --t1 = do
+    --print "hi"
 
 -- For withUtf8, see https://serokell.io/blog/haskell-with-utf8
