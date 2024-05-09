@@ -1,6 +1,6 @@
 module Main where
 
-import Compiler.Parser.Grammar
+--import Compiler.Parser.Grammar
 import Compiler.Parser.Lexer
 
 import Data.Text.IO qualified as TIO
@@ -14,7 +14,7 @@ main = do
   source <- case args of
     [] -> error "Cannot find a program to parse"
     h : _ -> TIO.readFile h -- will throw exception if the file doesn't exist
-  print $ runAlex source clike
+  print "hello" -- $ runAlex source clike
  where
   -- let x =
   --      "\
