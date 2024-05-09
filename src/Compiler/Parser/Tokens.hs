@@ -70,7 +70,7 @@ data Token
   | Restrict
   | Return
   | Sizeof
-  | Static
+  | TStatic
   | Struct
   | Switch
   | TypeDef

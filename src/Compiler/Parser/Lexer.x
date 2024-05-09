@@ -1,5 +1,6 @@
 {
-module Compiler.Parser.Lexer (alexMonadScan, runAlex, alexEOF, Alex, AlexUserState(..)) where
+-- {-# LANGUAGE NoMonomorphismRestriction #-}
+module Compiler.Parser.Lexer (alexMonadScan, runAlex, alexEOF) where
 
 import Control.Applicative as App (Applicative (..))
 import Data.Maybe
@@ -18,9 +19,16 @@ import qualified Data.Map as M
 
 import Compiler.Parser.Tokens
 
-import Compiler.Parser.Monad
+--import Compiler.Parser.Monad
+
+import Effectful
+import Effectful.Error.Static
+import Effectful.State.Static.Local
 }
 
+
+%action "AlexInput -> Int -> Eff es Token"
+%typeclass "(State AlexState :> es, State SymbolTable :> es, Error String :> es)"
 -- need to add 
 
 $digit = [0-9]    -- digits
@@ -123,7 +131,7 @@ tokens :-
 <0> register                  { basicAction Register }
 <0> restrict                  { basicAction Restrict }
 <0> return                    { basicAction Return }
-<0> static                    { basicAction Static }
+<0> static                    { basicAction TStatic }
 <0> sizeof                    { basicAction Sizeof}
 <0> struct                    { basicAction Struct}
 <0> switch                    { basicAction Switch }
@@ -197,7 +205,7 @@ tokens :-
 
         -- check if an ident is a type or a normal ident
         -- TODO: add a check for enum constants
-<0>  $nondigit $identnondigit* { \(_,_,_,t) i -> alexGetUserState <&> (\(AlexUserState (symtbl:_)) -> if isJust (M.lookup t symtbl) then TTypeName (T.take i t) else Ident (T.take i t)) }
+<0>  $nondigit $identnondigit* { \(_,_,_,t) i -> get @SymbolTable <&> (\(symtbl:_) -> if isJust (M.lookup t symtbl) then TTypeName (T.take i t) else Ident (T.take i t)) }
         -- integer constants
 <0>  $nzdigit $digit* @integersuffix         {\(_,_,_,t) i -> pure $ error ""}
 
@@ -226,25 +234,244 @@ tokens :-
 <0>  $white+;
         -- matche everything other than 
 <0>  "//" { begin linecomment }
-<0>  "/*" {begin blockcomment}
+<0>  "/*" { begin blockcomment }
 
 <linecomment> [^\n]* ;  -- match non linebreaks
-<linecomment> "\n" {begin 0} -- switch back to code
+<linecomment> "\n" { begin 0 } -- switch back to code
 
 <blockcomment> [^\*]*; -- match everything other than *
 <blockcomment> "*" [^\/]; -- match * not followed by /
-<blockcomment> "*/" {begin 0} -- match */
+<blockcomment> "*/" { begin 0 } -- match */
 -- { begin 0 }
 -- <linecomment>
 -- <blockcomment> 
     
 {
-alexEOF :: Alex Token
+
+type SymbolTable = [M.Map T.Text ()]
+
+alexInitUserState :: SymbolTable
+alexInitUserState = [M.empty]
+
+
+alexEOF :: Eff es Token
 alexEOF = pure EOF
 
-basicAction :: Token -> (AlexInput -> Int -> Alex Token)
+basicAction :: (State AlexState :> es) => Token -> (AlexInput -> Int -> Eff es Token)
 basicAction token _ _ = pure token
 
+-- -----------------------------------------------------------------------------
+-- Default monad
+
+
+data AlexState = AlexState {
+    alex_pos :: !AlexPosn,  -- position at current input location
+    alex_inp :: T.Text, -- the current input
+    alex_chr :: !Char,  -- the character before the input
+    alex_bytes :: [Byte],        -- rest of the bytes for the current char
+    alex_scd :: !Int    -- the current startcode
+}
+
+
+-- Compile with -funbox-strict-fields for best results!
+-- handle the effects here
+runAlex :: T.Text -> Eff (State AlexState ': es) a -> Eff es a
+runAlex input__ = evalState (AlexState alexStartPos input__ '\n' [] 0)
+    {-(AlexState{alex_bytes = [], 
+      alex_pos = alexStartPos, 
+      alex_inp = input__,
+      alex_chr = '\n',
+      alex_scd = 0 } )-}
+
+alexGetInput :: State AlexState :> es => Eff es AlexInput
+alexGetInput = do
+  AlexState{alex_pos=pos,alex_chr=c,alex_bytes=bs,alex_inp=inp__} <- get
+  pure (pos,c,bs,inp__)
+
+
+-- I think this should be right
+-- prob replace this with modify
+alexSetInput :: State AlexState :> es => AlexInput -> Eff es ()
+alexSetInput (pos, c, bs,inp__) = 
+    get >>= \s -> case s{alex_pos=pos,alex_chr=c,alex_bytes=bs,alex_inp=inp__} of
+        state__@(AlexState{}) -> put state__
+
+--type AlexError = String
+
+--alexError :: Error AlexError :> es => String -> Eff es a
+--alexError message = throwError message
+
+alexGetStartCode :: State AlexState :> es => Eff es Int
+alexGetStartCode = get <&> \AlexState{alex_scd=sc} -> sc
+
+alexSetStartCode :: State AlexState :> es => Int -> Eff es ()
+alexSetStartCode sc = modify (\s -> s{alex_scd=sc}) 
+
+--alexScan :: (Error AlexError :> es,  State AlexState :> es, State SymbolTable :> es) => AlexInput -> Int -> AlexReturn (AlexInput -> Int -> Eff es Token)
+
+
+alexMonadScan :: (Error String :> es, State AlexState :> es, State SymbolTable :> es) => Eff es Token
+alexMonadScan = do
+  inp__ <- alexGetInput
+  sc <- alexGetStartCode
+  case alexScan inp__ sc of
+    AlexEOF -> alexEOF
+    AlexError ((AlexPn _ line column),_,_,_) -> throwError $  "lexical error at line " ++ (show line) ++ ", column " ++ (show column)
+    AlexSkip  inp__' _len -> do
+      alexSetInput inp__'
+      alexMonadScan
+    --AlexToken inp__' len (action :: State AlexState :> es => AlexInput -> Int -> Eff es Token) -> do
+    AlexToken inp__' len action -> do
+      alexSetInput inp__'
+      action (ignorePendingBytes inp__) len
+
+-- -----------------------------------------------------------------------------
+-- Useful token actions
+
+-- just ignore this token and scan another one
+-- skip :: AlexAction result
+skip input len = alexMonadScan
+
+-- ignore this token, but set the start code to a new value
+-- begin :: Int -> AlexAction result
+begin code input len = do alexSetStartCode code; alexMonadScan
+
+-- perform an action for this token, and set the start code to a new value
+-- andBegin :: AlexAction result -> Int -> AlexAction result
+(action `andBegin` code) input len = do alexSetStartCode code; action input len
+
+-- token :: (String -> Int -> token) -> AlexAction token
+token t input len = return (t input len)
+
+{-
+-}
+--type AlexAction result = AlexInput -> Int -> result
+
+type Byte = Word8
+
+-- | Encode a Haskell String to a list of Word8 values, in UTF8 format.
+utf8Encode :: Char -> [Word8]
+utf8Encode = uncurry (:) . utf8Encode'
+
+utf8Encode' :: Char -> (Word8, [Word8])
+utf8Encode' c = case go (ord c) of
+                  (x, xs) -> (fromIntegral x, map fromIntegral xs)
+ where
+  go oc
+   | oc <= 0x7f       = ( oc
+                        , [
+                        ])
+
+   | oc <= 0x7ff      = ( 0xc0 + (oc `Data.Bits.shiftR` 6)
+                        , [0x80 + oc Data.Bits..&. 0x3f
+                        ])
+
+   | oc <= 0xffff     = ( 0xe0 + (oc `Data.Bits.shiftR` 12)
+                        , [0x80 + ((oc `Data.Bits.shiftR` 6) Data.Bits..&. 0x3f)
+                        , 0x80 + oc Data.Bits..&. 0x3f
+                        ])
+   | otherwise        = ( 0xf0 + (oc `Data.Bits.shiftR` 18)
+                        , [0x80 + ((oc `Data.Bits.shiftR` 12) Data.Bits..&. 0x3f)
+                        , 0x80 + ((oc `Data.Bits.shiftR` 6) Data.Bits..&. 0x3f)
+                        , 0x80 + oc Data.Bits..&. 0x3f
+                        ])
+
+
+type AlexInput = (AlexPosn,       -- current position,
+                  Char,           -- previous char
+                  [Byte],         -- pending bytes on current char
+                  T.Text) -- current input string
+
+ignorePendingBytes :: AlexInput -> AlexInput
+ignorePendingBytes (p,c,_ps,s) = (p,c,[],s)
+
+alexInputPrevChar :: AlexInput -> Char
+alexInputPrevChar (_p,c,_bs,_s) = c
+
+alexGetByte :: AlexInput -> Maybe (Byte,AlexInput)
+alexGetByte (p,c,(b:bs),s) = Just (b,(p,c,bs,s))
+alexGetByte (p,_,[],s) = case T.uncons s of
+                            Just (c, cs) ->
+                              let p' = alexMove p c
+                              in case utf8Encode' c of
+                                   (b, bs) -> p' `seq`  Just (b, (p', c, bs, cs))
+                            Nothing ->
+                              Nothing
+
+
+data AlexPosn = AlexPn !Int !Int !Int
+    deriving stock (Eq,Show)
+
+alexStartPos :: AlexPosn
+alexStartPos = AlexPn 0 1 1
+
+alexMove :: AlexPosn -> Char -> AlexPosn
+alexMove (AlexPn a l c) '\t' = AlexPn (a+1)  l     (((c+7) `div` 8)*8+1)
+alexMove (AlexPn a l _) '\n' = AlexPn (a+1) (l+1)   1
+alexMove (AlexPn a l c) _    = AlexPn (a+1)  l     (c+1)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+{-
 alexMonadScan = do
     inp__ <- alexGetInput
     sc <- alexGetStartCode
@@ -257,11 +484,14 @@ alexMonadScan = do
         AlexToken inp__' len action -> do
             alexSetInput inp__'
             action (ignorePendingBytes inp__) len
+-}
 
 -- -----------------------------------------------------------------------------
 -- Useful token actions
 
-type AlexAction result = AlexInput -> Int -> Alex result
+
+{-
+type AlexAction result = AlexInput -> Int -> Eff 
 
 -- just ignore this token and scan another one
 -- skip :: AlexAction result
@@ -279,5 +509,6 @@ andBegin :: AlexAction result -> Int -> AlexAction result
 
 token :: (AlexInput -> Int -> token) -> AlexAction token
 token t input__ len = return (t input__ len)
+-}
 
 }
