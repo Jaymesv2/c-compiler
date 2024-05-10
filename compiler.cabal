@@ -28,6 +28,7 @@ common shared
     -Wmissing-deriving-strategies -Wunused-foralls -Wunused-foralls
     -fprint-explicit-foralls -fprint-explicit-kinds
     -fplugin=Effectful.Plugin
+    -- -fspecialise-aggressively -fexpose-all-unfoldings -O2
 
 
   mixins:
@@ -121,7 +122,6 @@ executable compiler
     --Compiler.Parser.Span
     Compiler.Parser.Tokens
     Compiler.Parser.ParseTree
-    Compiler.Parser.Monad
     Compiler.Parser.Lexer
     Compiler.Parser
     --Compiler.Parser.Grammar
