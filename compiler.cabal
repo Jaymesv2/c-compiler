@@ -123,6 +123,7 @@ executable compiler
     --Compiler.Parser.Span
     Compiler.Parser.Tokens
     Compiler.Parser.ParseTree
+    Compiler.Parser.Preprocessor
     Compiler.Parser.Lexer
     Compiler.Parser
     --Compiler.Parser.Grammar
