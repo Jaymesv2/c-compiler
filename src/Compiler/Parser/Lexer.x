@@ -1,6 +1,6 @@
 {
 -- {-# LANGUAGE NoMonomorphismRestriction #-}
-module Compiler.Parser.Lexer (alexMonadScan, runAlex, AlexState, printTokens) where
+module Compiler.Parser.Lexer (alexMonadScan, runAlex, AlexState, newAlexState, printTokens) where
 
 import Control.Applicative as App (Applicative (..))
 import Data.Maybe
@@ -28,8 +28,8 @@ import Effectful.State.Static.Local
 }
 
 
-%action "AlexInput -> Int -> Eff es Token"
-%typeclass "(State AlexState :> es, State SymbolTable :> es, Error String :> es)"
+%action "AlexInput -> Int -> Eff es PPToken"
+%typeclass "(State AlexState :> es, Error String :> es)"
 -- need to add 
 
 $digit = [0-9]    -- digits
@@ -114,157 +114,188 @@ $qchar = [^\n\"]
 --    float literals
 --    hex literals
 --    octal literals
+-- <0> auto                      { basicAction TypeDef }
+-- <0> break                     { basicAction Break }
+-- <0> case                      { basicAction Case }
+-- <0> const                     { basicAction Const }
+-- <0> continue                  { basicAction Continue}
+-- <0> default                   { basicAction Default }
+-- <0> do                        { basicAction Do }
+-- <0> else                      { basicAction Else }
+-- <0> enum                      { basicAction Enum }
+-- <0> extern                    { basicAction Extern }
+-- <0> for                       { basicAction For }
+-- <0> goto                      { basicAction Goto}
+-- <0> if                        { basicAction If }
+-- <0> inline                    { basicAction Inline }
+-- <0> register                  { basicAction Register }
+-- <0> restrict                  { basicAction Restrict }
+-- <0> return                    { basicAction Return }
+-- <0> static                    { basicAction TStatic }
+-- <0> sizeof                    { basicAction Sizeof}
+-- <0> struct                    { basicAction Struct}
+-- <0> switch                    { basicAction Switch }
+-- <0> typedef                   { basicAction TypeDef }
+-- <0> union                     { basicAction Union }
+-- <0> volatile                  { basicAction Volatile }
+-- <0> while                     { basicAction While}
+-- 
+-- <0> void                      { basicAction Void }
+-- <0> char                      { basicAction TChar}
+-- <0> short                     { basicAction TShort}
+-- <0> int                       { basicAction TInt}
+-- <0> long                      { basicAction TLong}
+-- <0> float                     { basicAction TFloat}
+-- <0> double                    { basicAction TDouble}
+-- <0> signed                    { basicAction TSigned}
+-- <0> unsigned                  { basicAction TUnsigned}
+-- <0> _Bool                     { basicAction TuBool}
+-- <0> _Complex                  { basicAction TuComplex}
+
+
+
+
+
+
+
+
+
+
+
+
 tokens :-
-<0> auto                      { basicAction TypeDef }
-<0> break                     { basicAction Break }
-<0> case                      { basicAction Case }
-<0> const                     { basicAction Const }
-<0> continue                  { basicAction Continue}
-<0> default                   { basicAction Default }
-<0> do                        { basicAction Do }
-<0> else                      { basicAction Else }
-<0> enum                      { basicAction Enum }
-<0> extern                    { basicAction Extern }
-<0> for                       { basicAction For }
-<0> goto                      { basicAction Goto}
-<0> if                        { basicAction If }
-<0> inline                    { basicAction Inline }
-<0> register                  { basicAction Register }
-<0> restrict                  { basicAction Restrict }
-<0> return                    { basicAction Return }
-<0> static                    { basicAction TStatic }
-<0> sizeof                    { basicAction Sizeof}
-<0> struct                    { basicAction Struct}
-<0> switch                    { basicAction Switch }
-<0> typedef                   { basicAction TypeDef }
-<0> union                     { basicAction Union }
-<0> volatile                  { basicAction Volatile }
-<0> while                     { basicAction While}
 
-<0> void                      { basicAction Void }
-<0> char                      { basicAction TChar}
-<0> short                     { basicAction TShort}
-<0> int                       { basicAction TInt}
-<0> long                      { basicAction TLong}
-<0> float                     { basicAction TFloat}
-<0> double                    { basicAction TDouble}
-<0> signed                    { basicAction TSigned}
-<0> unsigned                  { basicAction TUnsigned}
-<0> _Bool                     { basicAction TuBool}
-<0> _Complex                  { basicAction TuComplex}
-<0> _Imaginary                { basicAction TuImaginary}
-<0> "{"                       { basicAction LBrace }
-<0> "}"                       { basicAction RBrace }
-<0> "("                       { basicAction LParen }
-<0> ")"                       { basicAction RParen }
-<0> "["                       { basicAction LBrack }
-<0> "]"                       { basicAction RBrack }
-<0> "->"                      { basicAction Arrow  }
-<0> "&"                       { basicAction BitAnd }
-<0> "|"                       { basicAction BitOr   }
-<0> "*"                       { basicAction Times }
-<0> "+"                       { basicAction Plus }
-<0> "-"                       { basicAction Minus }
-<0> "~"                       { basicAction Compliment }
-<0> "!"                       { basicAction Not }
-<0> "/"                       { basicAction Divide }
-<0> "%"                       { basicAction Modulo }
-<0> "<<"                      { basicAction LShift } 
-<0> ">>"                      { basicAction RShift } 
-<0> "<"                       { basicAction Lt     }
-<0> "<="                      { basicAction Le     }
-<0> ">"                       { basicAction Gt     }
-<0> ">="                      { basicAction Ge     }
-<0> "=="                      { basicAction Eq     }
-<0> "!="                      { basicAction Neq    }
-<0> "^"                       { basicAction BitXor }
-<0> "&&"                      { basicAction LAnd   }
-<0> "||"                      { basicAction LOr    }
-<0> ";"                       { basicAction Semi   }
-<0> "="                       { basicAction Assign }
-<0> ","                       { basicAction Comma  }
-<0> "."                       { basicAction Dot    }
-<0> ":"                       { basicAction Colon  }
+-- <0> ^"#include"               { ppspecial Include }
+-- <0> ^"#define"                { ppspecial Define }
+-- <0> ^"#undef"                 { ppspecial Undef }
+-- <0> ^"#line"                  { ppspecial Line }
+-- <0> ^"#error"                 { ppspecial PPSError }
+-- <0> ^"#pragma"                { ppspecial Pragma }
+-- <0> ^"#"                      { ppspecial PPSEmpty }
 
-    -- new operators    
-<0> "++"                      { basicAction PlusPlus }
-<0> "--"                      { basicAction MinusMinus }
-<0> "?"                       { basicAction Question  }
-<0> "..."                     { basicAction Variadic  }
-<0> "*="                      { basicAction TimesAssign }
-<0> "/="                      { basicAction DivAssign}
-<0> "%="                      { basicAction ModAssign}
-<0> "+="                      { basicAction PlusAssign}
-<0> "-="                      { basicAction MinusAssign}
-<0> "<<="                     { basicAction LShiftAssign}
-<0> ">>="                     { basicAction RShiftAssign}
-<0> "&="                      { basicAction AndAssign}
-<0> "^="                      { basicAction XorAssign}
-<0> "|="                      { basicAction OrAssign}
-<0> "#"                       { basicAction Stringize }
-<0> "##"                      { basicAction TokenPaste}
+<0> "{"                       { punctuator LBrace }
+<0> "}"                       { punctuator RBrace }
+<0> [$white]^"("              { punctuator LParen }
+<0> [^$white]^"("             { \_ _ -> pure $ PPSpecial PPSLParen }
+<0> ")"                       { punctuator RParen }
+<0> "["                       { punctuator LBrack }
+<0> "]"                       { punctuator RBrack }
+<0> "->"                      { punctuator Arrow  }
+<0> "&"                       { punctuator BitAnd }
+<0> "|"                       { punctuator BitOr  }
+<0> "*"                       { punctuator Times  }
+<0> "+"                       { punctuator Plus   }
+<0> "-"                       { punctuator Minus  }
+<0> "~"                       { punctuator Compliment }
+<0> "!"                       { punctuator Not    }
+<0> "/"                       { punctuator Divide }
+<0> "%"                       { punctuator Modulo }
+<0> "<<"                      { punctuator LShift } 
+<0> ">>"                      { punctuator RShift } 
+<0> "<"                       { punctuator Lt     }
+<0> "<="                      { punctuator Le     }
+<0> ">"                       { punctuator Gt     }
+<0> ">="                      { punctuator Ge     }
+<0> "=="                      { punctuator Eq     }
+<0> "!="                      { punctuator Neq    }
+<0> "^"                       { punctuator BitXor }
+<0> "&&"                      { punctuator LAnd   }
+<0> "||"                      { punctuator LOr    }
+<0> ";"                       { punctuator Semi   }
+<0> "="                       { punctuator Assign }
+<0> ","                       { punctuator Comma  }
+<0> "."                       { punctuator Dot    }
+<0> ":"                       { punctuator Colon  }
+<0> "++"                      { punctuator PlusPlus    }
+<0> "--"                      { punctuator MinusMinus  }
+<0> "?"                       { punctuator Question    }
+<0> "..."                     { punctuator Variadic    }
+<0> "*="                      { punctuator TimesAssign }
+<0> "/="                      { punctuator DivAssign   }
+<0> "%="                      { punctuator ModAssign   }
+<0> "+="                      { punctuator PlusAssign  }
+<0> "-="                      { punctuator MinusAssign }
+<0> "<<="                     { punctuator LShiftAssign}
+<0> ">>="                     { punctuator RShiftAssign}
+<0> "&="                      { punctuator AndAssign   }
+<0> "^="                      { punctuator XorAssign   }
+<0> "|="                      { punctuator OrAssign    }
+<0> "#"                       { punctuator Stringize   }
+<0> "##"                      { punctuator TokenPaste  }
+-- string literals
+<0>  \" @schar+ \"              { \(_,_,_,t) i -> pure $ PPStringLiteral (T.take (i - 2) (T.tail t)) }
+-- wide string literals
+<0>  "L\"" @schar+ \"              { \(_,_,_,t) i -> pure $ PPStringLiteral (T.take (i-3) (T.tail . T.tail $ t)) } 
 
-        -- check if an ident is a type or a normal ident
-        -- TODO: add a check for enum constants
-<0>  $nondigit $identnondigit* { \(_,_,_,t) i -> get @SymbolTable <&> (\(symtbl:_) -> if isJust (M.lookup t symtbl) then TTypeName (T.take i t) else Ident (T.take i t)) }
-        -- integer constants
-<0>  $nzdigit $digit* @integersuffix?         {\(_,_,_,t) i -> pure . Constant $ IntConst (T.take i t ) Decimal Signed Standard }
+<0>  \' @cchar+ \'          { \(_,_,_,t) i -> pure $ PPCharConst (T.take i t)}
 
-        -- octal const
-<0>  "0" $octaldigit* @integersuffix?         {\(_,_,_,t) i -> pure . Constant $ IntConst (T.take i t) Octal Signed Standard }
-        -- hex const
-<0>  @hexprefix $hexdigit* @integersuffix?    {\(_,_,_,t) i -> pure . Constant $ IntConst (T.take i t) Hex Signed Standard }
 
-        -- floating constants
-<0>  @fractionalConstant @exponentialPart? $floatingsuffix? 
-            {\(_,_,_,t) i -> pure . Constant . FloatConst $ FracFloatingConstant (Nothing, Nothing) Nothing LongDouble}
-<0>  $digit+ @exponentialPart $floatingsuffix? 
-            {\(_,_,_,t) i -> pure . Constant . FloatConst $ FracFloatingConstant (Nothing, Nothing) Nothing LongDouble}
-<0>  @hexprefix @hexFractionalConstant @hexExponentialPart $floatingsuffix? 
-            {\(_,_,_,t) i -> pure . Constant . FloatConst $ FracFloatingConstant (Nothing, Nothing) Nothing LongDouble}
+<0>  $nondigit $identnondigit* { \(_,_,_,t) i -> pure $ PPIdent (T.take i t) }
 
-<0>  \" @schar+ \"              { \(_,_,_,t) i -> pure $ StringLiteral (T.take i t) }
-        -- wide string literals
-<0>  "L\"" @schar+ \"              { \(_,_,_,t) i -> pure $ StringLiteral (T.take i t) } 
-
-<0>  \' @cchar+ \'          { \(_,_,_,t) i -> pure $ Constant (CharConst (T.take i t))}
+<0>  ([^$white] # [$nondigit $digit \'\" \( \) \{ \} \[ \] \| \* \+ \~ \- \; \, \? \. \^ \/ \# \> \< & \% ! = : ]) [^$white]*  { \(_,_,_,t) i -> pure $ PPOther (T.take i t)}
 
         -- headernames
 -- <0>  "<" [^\n>]+ ">"              { \(_,_,_,t) i -> pure $ error "d" }
 -- <0>  \" [^\n\"] \"           { \(_,_,_,t) i -> pure $ error "e" }
 
         -- preprocessing numbers
--- <0>  "."? $digit+ (identnondigit | [eEpP] sign | ".")? {\(_,_,_,t) i -> error "f"}
-<0>  $white+;
+<0>  "."? $digit+ (identnondigit | [eEpP] sign | ".")? {\(_,_,_,t) i -> pure $ PPNumber (T.take i t)}
+<0>  ($white # [\n])+;
+
+
+
+<0>  [\n] {\(_,_,_,t) i -> pure $ PPNewline}
+
+
+
         -- matche everything other than 
 <0>  "//" { begin linecomment }
 <0>  "/*" { begin blockcomment }
 
-<linecomment> [^\n]+ ;  -- match non linebreaks
-<linecomment> \n { begin 0 } -- switch back to code
+-- <linecomment> [^\n]+ ;  -- match non linebreaks
+-- <linecomment> \n { begin 0 } -- switch back to code
+<linecomment> [^\n]+ { begin 0 }  -- match non linebreaks
 
 <blockcomment> [^\*]+; -- match everything other than *
 <blockcomment> "*" [^\/]; -- match * not followed by /
 <blockcomment> "*/" { begin 0 } -- match */
--- { begin 0 }
--- <linecomment>
--- <blockcomment> 
+
+
+        -- check if an ident is a type or a normal ident
+        -- TODO: add a check for enum constants
+-- <0>  $nondigit $identnondigit* { \(_,_,_,t) i -> get @SymbolTable <&> (\(symtbl:_) -> if isJust (M.lookup t symtbl) then TTypeName (T.take i t) else Ident (T.take i t)) }
+-- <0>  $nzdigit $digit* @integersuffix?         {\(_,_,_,t) i -> pure . Constant $ IntConst (T.take i t ) Decimal Signed Standard }
+-- <0>  "0" $octaldigit* @integersuffix?         {\(_,_,_,t) i -> pure . Constant $ IntConst (T.take i t) Octal Signed Standard }
+-- <0>  @hexprefix $hexdigit* @integersuffix?    {\(_,_,_,t) i -> pure . Constant $ IntConst (T.take i t) Hex Signed Standard }
+-- 
+--         -- floating constants
+-- <0>  @fractionalConstant @exponentialPart? $floatingsuffix? 
+--             {\(_,_,_,t) i -> pure . Constant . FloatConst $ FracFloatingConstant (Nothing, Nothing) Nothing LongDouble}
+-- <0>  $digit+ @exponentialPart $floatingsuffix? 
+--             {\(_,_,_,t) i -> pure . Constant . FloatConst $ FracFloatingConstant (Nothing, Nothing) Nothing LongDouble}
+-- <0>  @hexprefix @hexFractionalConstant @hexExponentialPart $floatingsuffix? 
+--             {\(_,_,_,t) i -> pure . Constant . FloatConst $ FracFloatingConstant (Nothing, Nothing) Nothing LongDouble}
     
 {
-
-
-alexInitUserState :: SymbolTable
-alexInitUserState = [M.empty]
-
-alexEOF :: Eff es Token
-alexEOF = pure EOF
 
 basicAction :: (State AlexState :> es) => Token -> (AlexInput -> Int -> Eff es Token)
 basicAction token _ _ = pure token
 
+punctuator :: (State AlexState :> es) => Punctuator -> (AlexInput -> Int -> Eff es PPToken)
+punctuator token _ _ = pure $ PPPunctuator token
+
+--ppspecial :: (State AlexState :> es) => PPSpecial -> (AlexInput -> Int -> Eff es PPToken)
+--ppspecial token _ _ = pure $ PPSpecial token
+
+alexInitUserState :: SymbolTable
+alexInitUserState = [M.empty]
+
+alexEOF :: Eff es PPToken
+alexEOF = pure PPEOF
+
+
 -- -----------------------------------------------------------------------------
 -- Default monad
-
 
 data AlexState = AlexState {
     alex_pos :: !AlexPosn,  -- position at current input location
@@ -272,28 +303,23 @@ data AlexState = AlexState {
     alex_chr :: !Char,  -- the character before the input
     alex_bytes :: [Byte],        -- rest of the bytes for the current char
     alex_scd :: !Int    -- the current startcode
-}
+} deriving stock (Eq, Show)
 
+newAlexState input = AlexState alexStartPos input '\n' [] 0
 
 -- Compile with -funbox-strict-fields for best results!
 -- handle the effects here
-runAlex :: T.Text -> Eff (State AlexState ': Error String ': State SymbolTable ': es) a -> Eff es (Either (CallStack, String) a)
-runAlex input__ = evalState [M.empty] . runError . evalState (AlexState alexStartPos input__ '\n' [] 0)
-    {-(AlexState{alex_bytes = [], 
-      alex_pos = alexStartPos, 
-      alex_inp = input__,
-      alex_chr = '\n',
-      alex_scd = 0 } )-}
+runAlex :: T.Text -> Eff (State AlexState ': Error String ':  es) a -> Eff es (Either (CallStack, String) a)
+runAlex input__ = runError . evalState (newAlexState input__)
 
 
-printTokens :: (IOE :> es, State AlexState :> es, State SymbolTable :> es, Error String :> es) => Eff es ()
+printTokens :: (IOE :> es, State AlexState :> es, Error String :> es) => Eff es ()
 printTokens = do
     token <- alexMonadScan
     liftIO $ print token
     case token of
-        EOF -> pure ()
+        PPEOF -> pure ()
         _ -> printTokens
-
 
 
 alexGetInput :: State AlexState :> es => Eff es AlexInput
@@ -305,14 +331,9 @@ alexGetInput = do
 -- I think this should be right
 -- prob replace this with modify
 alexSetInput :: State AlexState :> es => AlexInput -> Eff es ()
-alexSetInput (pos, c, bs,inp__) = 
-    get >>= \s -> case s{alex_pos=pos,alex_chr=c,alex_bytes=bs,alex_inp=inp__} of
-        state__@(AlexState{}) -> put state__
-
---type AlexError = String
-
---alexError :: Error AlexError :> es => String -> Eff es a
---alexError message = throwError message
+alexSetInput (pos, c, bs,inp__) = modify @AlexState (\s -> s{alex_pos=pos,alex_chr=c,alex_bytes=bs,alex_inp=inp__})
+{-alexSetInput (pos, c, bs,inp__) = 
+    get >>= \s -> case s{alex_pos=pos,alex_chr=c,alex_bytes=bs,alex_inp=inp__} of state__@(AlexState{}) -> put state__-}
 
 alexGetStartCode :: State AlexState :> es => Eff es Int
 alexGetStartCode = get <&> \AlexState{alex_scd=sc} -> sc
@@ -320,10 +341,7 @@ alexGetStartCode = get <&> \AlexState{alex_scd=sc} -> sc
 alexSetStartCode :: State AlexState :> es => Int -> Eff es ()
 alexSetStartCode sc = modify (\s -> s{alex_scd=sc}) 
 
---alexScan :: (Error AlexError :> es,  State AlexState :> es, State SymbolTable :> es) => AlexInput -> Int -> AlexReturn (AlexInput -> Int -> Eff es Token)
-
-
-alexMonadScan :: (Error String :> es, State AlexState :> es, State SymbolTable :> es) => Eff es Token
+alexMonadScan :: (Error String :> es, State AlexState :> es) => Eff es PPToken
 alexMonadScan = do
   inp__ <- alexGetInput
   sc <- alexGetStartCode
@@ -426,102 +444,6 @@ alexMove (AlexPn a l c) _    = AlexPn (a+1)  l     (c+1)
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-{-
-alexMonadScan = do
-    inp__ <- alexGetInput
-    sc <- alexGetStartCode
-    case alexScan inp__ sc of
-        AlexEOF -> alexEOF
-        AlexError ((AlexPn _ line column), _, _, _) -> alexError $ "lexical error at line " ++ (show line) ++ ", column " ++ (show column)
-        AlexSkip inp__' _len -> do
-            alexSetInput inp__'
-            alexMonadScan
-        AlexToken inp__' len action -> do
-            alexSetInput inp__'
-            action (ignorePendingBytes inp__) len
--}
-
--- -----------------------------------------------------------------------------
--- Useful token actions
-
-
-{-
-type AlexAction result = AlexInput -> Int -> Eff 
-
--- just ignore this token and scan another one
--- skip :: AlexAction result
-skip _input _len = alexMonadScan
-
--- ignore this token, but set the start code to a new value
--- begin :: Int -> AlexAction result
-begin code _input _len = do alexSetStartCode code; alexMonadScan
-
--- perform an action for this token, and set the start code to a new value
-andBegin :: AlexAction result -> Int -> AlexAction result
-(action `andBegin` code) input__ len = do
-    alexSetStartCode code
-    action input__ len
-
-token :: (AlexInput -> Int -> token) -> AlexAction token
-token t input__ len = return (t input__ len)
--}
-
 }
+
+

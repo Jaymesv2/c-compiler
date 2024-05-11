@@ -1,8 +1,56 @@
-module Compiler.Parser.Tokens (Identifier, Token (..), FloatingConstant (..), Size (..), FloatSize (..), NumRep (..), Sign (..), Constant (..)) where
+module Compiler.Parser.Tokens (Identifier, PPToken(..), PPSpecial (..), Punctuator (..), Keyword (..), Token (..), FloatingConstant (..), Size (..), FloatSize (..), NumRep (..), Sign (..), Constant (..)) where
 
 import Data.Text qualified as T
 
 type Identifier = T.Text
+
+data PPToken 
+  = PPHeaderName T.Text
+  | PPIdent Identifier
+  | PPNumber T.Text
+  | PPCharConst T.Text
+  | PPStringLiteral T.Text
+  | PPPunctuator Punctuator
+  | PPOther T.Text
+  | PPNewline
+  | PPSpecial PPSpecial
+  | PPEOF
+  deriving stock (Eq)
+
+
+instance Show PPToken where
+  show (PPHeaderName n) = T.unpack n
+  show (PPIdent n) = T.unpack n
+  show (PPNumber n) = T.unpack n
+  show (PPCharConst c) = T.unpack c
+  show (PPStringLiteral s) = "\"" ++ T.unpack s ++ "\""
+  show (PPPunctuator p) = show p
+  show (PPOther t) = T.unpack t
+  show (PPSpecial s) = "special"
+  show PPEOF = "EOF"
+
+
+
+
+data PPSpecial
+  = PPSLParen
+  deriving stock (Eq, Show)
+
+data Token
+  = 
+    Ident Identifier -- T.Text
+  | TTypeName Identifier
+  | TEnumConst Identifier
+  | StringLiteral T.Text
+  | Constant Constant
+  | Punctuator Punctuator
+  | Keyword Keyword
+  | EOF
+  deriving stock (Eq, Show)
+   -- operations
+
+
+
 
 data Sign = Signed | Unsigned
   deriving stock (Eq, Show)
@@ -44,14 +92,7 @@ data FloatingConstant
   | LFloat T.Text
   deriving stock (Eq, Show)-}
 
-data Token
-  = -- keywords
-    Ident Identifier -- T.Text
-  | TTypeName Identifier
-  | TEnumConst Identifier
-  | StringLiteral T.Text
-  | Constant Constant
-  | -- keywords
+data Keyword = 
     Auto
   | Break
   | Case
@@ -77,8 +118,23 @@ data Token
   | Union
   | Volatile
   | While
-  | -- operations
-    LBrace
+  | Void
+  | TChar
+  | TShort
+  | TInt
+  | TLong
+  | TFloat
+  | TDouble
+  | TuBool
+  | -- type qualifiers
+    TSigned
+  | TUnsigned
+  | TuComplex
+  | TuImaginary
+  deriving stock (Eq, Show)
+
+data Punctuator
+  = LBrace
   | RBrace
   | LParen
   | RParen
@@ -90,10 +146,12 @@ data Token
   | Comma
   | Dot
   | Arrow
-  | --
-    BitAnd
-  | BitOr
+  --project1.c
+  | Stringize
+  | TokenPaste
   | BitXor
+  | BitOr
+  | BitAnd
   | Compliment
   | LShift
   | RShift
@@ -119,8 +177,6 @@ data Token
   | AndAssign
   | XorAssign
   | OrAssign
-  | Stringize
-  | TokenPaste
   | -- comparison
     Lt
   | Le
@@ -130,19 +186,56 @@ data Token
   | Neq
   | LAnd
   | LOr
-  | -- primitive types
-    Void
-  | TChar
-  | TShort
-  | TInt
-  | TLong
-  | TFloat
-  | TDouble
-  | TuBool
-  | -- type qualifiers
-    TSigned
-  | TUnsigned
-  | TuComplex
-  | TuImaginary
-  | EOF
-  deriving stock (Eq, Show)
+   -- primitive types
+  deriving stock Eq
+instance Show Punctuator where
+  show punct = 
+    case punct of
+      LBrace -> "{"
+      RBrace -> "}"
+      LParen -> "("
+      RParen -> ")"
+      LBrack -> "["
+      RBrack -> "]"
+      Semi -> ","
+      Colon -> ":"
+      Assign -> "="
+      Comma -> ","
+      Dot -> "."
+      Arrow -> "->"
+      Stringize -> "#"
+      TokenPaste -> "##"
+      BitXor -> "^"
+      BitOr -> "|"
+      BitAnd -> "&"
+      Compliment -> "~"
+      LShift -> ">>"
+      RShift -> "<<"
+      Times -> "*"
+      Plus -> "+"
+      Minus -> "-"
+      Not -> "!"
+      Divide -> "/"
+      Modulo -> "%"
+      PlusPlus -> "++"
+      MinusMinus -> "--"
+      Question -> "?"
+      Variadic -> "..."
+      TimesAssign -> "*="
+      DivAssign -> "/="
+      ModAssign -> "%="
+      PlusAssign -> "+="
+      MinusAssign -> "-="
+      LShiftAssign -> "<<="
+      RShiftAssign -> ">>="
+      AndAssign -> "&="
+      XorAssign -> "^="
+      OrAssign -> "|="
+      Lt -> "<"
+      Le -> "<="
+      Gt -> ">"
+      Ge -> ">="
+      Eq -> "=="
+      Neq -> "!="
+      LAnd -> "&&"
+      LOr -> "||"

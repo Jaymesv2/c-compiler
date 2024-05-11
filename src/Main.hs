@@ -2,6 +2,7 @@ module Main where
 
 --import Compiler.Parser.Grammar
 import Compiler.Parser.Lexer
+import Compiler.Parser.Preprocessor
 
 import Data.Text.IO qualified as TIO
 import System.Environment
@@ -17,8 +18,10 @@ main =  do
     [] -> error "Cannot find a program to parse"
     h : _ -> TIO.readFile h -- will throw exception if the file doesn't exist
   --x <- runEff $ runAlex source clike
-  --let source = "//int func(int i) { int i; }"
+  --let source = "int func(int i) { int i; }"
   -- print source
-  _ <- runEff $ runAlex source printTokens
+  --_ <- runEff $ runAlex source printTokens
+  _ <- runEff $ runAlex source $ runPreprocessor printPPTokens
+  
   pure ()
 -- For withUtf8, see https://serokell.io/blog/haskell-with-utf8
