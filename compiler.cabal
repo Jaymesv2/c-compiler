@@ -87,6 +87,7 @@ common shared
     , vector
     , parsec
     , containers
+    , conduit
     , mtl
     , transformers
     , array
