@@ -14,9 +14,11 @@ module Compiler.Parser.Preprocessor(preprocess, PreprocessorState, printPPTokens
 import Data.Functor
 import Control.Monad
 
+
 import Compiler.Parser
 import Compiler.Parser.Lexer
 import Compiler.Parser.Tokens
+import Compiler.Parser.TokenParsers
 
 import Effectful
 import Effectful.Error.Static
@@ -348,7 +350,12 @@ preprocess = do
     case nextToken of
         PPHeaderName x -> error ""
         PPOther o -> error ""
-        PPNumber n -> error "implement coversion from PP number to num constants"
+        PPNumber n -> do
+            -- liftIO . print $ "num const" ++ show n
+            liftIO . print $ n
+            case parseNumConstant n of
+                Left err -> throwError "failed to parse num constant"
+                Right c -> pure $ Constant c
         PPCharConst c -> pure $ Constant $ CharConst c
         PPStringLiteral s -> pure $ StringLiteral s
         PPPunctuator punct -> pure $ Punctuator punct

@@ -507,7 +507,6 @@ DirectDeclarator :: { DirectDeclarator }
     | DirectDeclarator '(' IdentifierList ')'                           { ( DDFuncIList $1 (reverse $3))      :: DirectDeclarator }    
     | DirectDeclarator '(' ')'                                          { ( DDFuncIList $1 [])      :: DirectDeclarator }   
                                                                             
-                                                                            
 -- declarators
 Pointer :: { Pointer }
     : '*' TypeQualifierList Pointer { (Pointer (reverse $2) (Just $3)) :: Pointer }

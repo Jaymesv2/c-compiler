@@ -1,4 +1,4 @@
-module Compiler.Parser.Tokens (Identifier, PPToken (..), PPSpecial (..), Punctuator (..), Keyword (..), Token (..), FloatingConstant (..), Size (..), FloatSize (..), NumRep (..), Sign (..), Constant (..)) where
+module Compiler.Parser.Tokens (Identifier, PPToken (..), PPSpecial (..), Punctuator (..), Keyword (..), Token (..), Size (..), FloatSize (..), NumRep (..), Sign (..), Constant (..)) where
 
 import Data.Text qualified as T
 
@@ -60,25 +60,13 @@ data NumRep = Hex | Decimal | Octal
   deriving stock (Eq, Show)
 
 data Constant
-  = IntConst T.Text NumRep Sign Size
-  | FloatConst FloatingConstant
+  = IntConst Integer NumRep Sign Size
+  | FloatConst (Int, Int) (Maybe (Sign, Int)) FloatSize
   | EnumConst Identifier
   | CharConst T.Text
   deriving stock (Eq, Show)
 
 -- page 55
-data FloatingConstant
-  = FracFloatingConstant
-      { significand :: (Maybe T.Text, Maybe T.Text)
-      , exponentialPart :: Maybe (Sign, T.Text)
-      , suffix :: FloatSize
-      }
-  | DigitFloatingConstant
-      { significandd :: T.Text
-      , exponentialPart :: Maybe (Sign, T.Text)
-      , suffix :: FloatSize
-      }
-  deriving stock (Eq, Show)
 
 {-data Literal
   = LString T.Text
