@@ -244,7 +244,9 @@ tokens :-
 
 
 
-<0>  [\n] {\(_,_,_,t) i -> pure $ PPNewline}
+<0>  \\\n ; -- dont emit a newline if (physical line concatenation)
+<0>  \n {\(_,_,_,t) i -> pure $ PPNewline}
+-- <0>  [\n] {\(_,_,_,t) i -> pure $ PPNewline}
 
 
 

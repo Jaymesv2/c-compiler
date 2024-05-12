@@ -27,6 +27,7 @@ instance Show PPToken where
   show (PPPunctuator p) = show p
   show (PPOther t) = T.unpack t
   show (PPSpecial s) = "special"
+  show (PPNewline) = "NL"
   show PPEOF = "EOF"
 
 
@@ -197,7 +198,7 @@ instance Show Punctuator where
       RParen -> ")"
       LBrack -> "["
       RBrack -> "]"
-      Semi -> ","
+      Semi -> ";"
       Colon -> ":"
       Assign -> "="
       Comma -> ","

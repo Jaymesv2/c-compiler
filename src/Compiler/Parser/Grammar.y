@@ -2,7 +2,8 @@
 {-# LANGUAGE NoMonomorphismRestriction #-}
 module Compiler.Parser.Grammar where
 
-import Compiler.Parser.Lexer (alexMonadScan, AlexState)
+import Compiler.Parser.Lexer (AlexState)
+import Compiler.Parser.Preprocessor (preprocess, PreprocessorState)
 
 import Compiler.Parser.ParseTree
 import Compiler.Parser.Tokens
@@ -19,9 +20,9 @@ import Effectful.State.Static.Local
 %name clike TranslationUnit
 %name expr Expr
 
-%monad {(Error String :> es, State AlexState :> es, State SymbolTable :> es) }  {Eff es} {>>=} {return}
-%lexer {lexer} {EOF}
---%lexer {(alexMonadScan >>=)} {EOF}
+%monad {(IOE :> es, Error String :> es, State AlexState :> es, State SymbolTable :> es, State PreprocessorState :> es )}  {Eff es} {>>=} {return}
+--%lexer {lexer} {EOF}
+%lexer {(preprocess >>=)} {EOF}
 
 %errorhandlertype explist
 %error {parseError}
@@ -33,93 +34,93 @@ import Effectful.State.Static.Local
     stringlit { StringLiteral $$ }
     constant  { Constant $$ }
 
-    auto    { Auto  }
-    break   { Break }
-    case    { Case }
-    const   { Const }
-    continue{ Continue }
-    default { Default }
-    do      { Do }
-    else    { Else }
-    extern  { Extern }
-    enum    { Enum }
-    for     { For }
-    goto    { Goto}
-    if      { If }
-    inline  { Inline }
-    register{ Register }
-    restrict{ Restrict }
-    return  { Return }
-    sizeof  { Sizeof}
-    static  { TStatic }
-    struct  { Struct}
-    switch  { Switch }
-    typedef { TypeDef }
-    union   { Union }
-    volatile{ Volatile}
-    while   { While}
+    auto    { Keyword Auto  }
+    break   { Keyword Break }
+    case    { Keyword Case }
+    const   { Keyword Const }
+    continue{ Keyword Continue }
+    default { Keyword Default }
+    do      { Keyword Do }
+    else    { Keyword Else }
+    extern  { Keyword Extern }
+    enum    { Keyword Enum }
+    for     { Keyword For }
+    goto    { Keyword Goto}
+    if      { Keyword If }
+    inline  { Keyword Inline }
+    register{ Keyword Register }
+    restrict{ Keyword Restrict }
+    return  { Keyword Return }
+    sizeof  { Keyword Sizeof}
+    static  { Keyword TStatic }
+    struct  { Keyword Struct}
+    switch  { Keyword Switch }
+    typedef { Keyword TypeDef }
+    union   { Keyword Union }
+    volatile{ Keyword Volatile}
+    while   { Keyword While}
 
-    void    { Void }
-    char    {  TChar}
-    short   {  TShort}
-    int     {  TInt}
-    long    {  TLong}
-    float   {  TFloat}
-    double  {  TDouble}
-    signed  {  TSigned}
-    unsigned{  TUnsigned}
-    uBool   {  TuBool}
-    uComplex {  TuComplex}
-    uImaginary {  TuImaginary}
-    '{'     { LBrace }
-    '}'     { RBrace }
-    '('     { LParen }
-    ')'     { RParen }
-    '['     { LBrack }
-    ']'     { RBrack }
-    '->'    { Arrow  }
-    '&'     { BitAnd }
-    '|'     { BitOr   }
-    '*'     { Times }
-    '+'     { Plus }
-    '-'     { Minus }
-    '~'     { Compliment }
-    '!'     { Not }
-    '/'     { Divide }
-    '%'     { Modulo }
-    '<<'    { LShift } 
-    '>>'    { RShift } 
-    '<'     { Lt     }
-    '<='    { Le     }
-    '>'     { Gt     }
-    '>='    { Ge     }
-    '=='    { Eq     }
-    '!='    { Neq    }
-    '^'     { BitXor }
-    '&&'    { LAnd   }
-    '||'    { LOr    }
-    ';'     { Semi   }
-    '='     { Assign }
-    ','     { Comma  }
-    '.'     { Dot }
-    ':'     { Colon}
+    void    { Keyword Void }
+    char    { Keyword TChar}
+    short   { Keyword TShort}
+    int     { Keyword TInt}
+    long    { Keyword TLong}
+    float   { Keyword TFloat}
+    double  { Keyword TDouble}
+    signed  { Keyword TSigned}
+    unsigned{ Keyword TUnsigned}
+    uBool   { Keyword TuBool}
+    uComplex { Keyword TuComplex}
+    uImaginary { Keyword TuImaginary}
+    '{'     { Punctuator LBrace }
+    '}'     { Punctuator RBrace }
+    '('     { Punctuator LParen }
+    ')'     { Punctuator RParen }
+    '['     { Punctuator LBrack }
+    ']'     { Punctuator RBrack }
+    '->'    { Punctuator Arrow  }
+    '&'     { Punctuator BitAnd }
+    '|'     { Punctuator BitOr   }
+    '*'     { Punctuator Times }
+    '+'     { Punctuator Plus }
+    '-'     { Punctuator Minus }
+    '~'     { Punctuator Compliment }
+    '!'     { Punctuator Not }
+    '/'     { Punctuator Divide }
+    '%'     { Punctuator Modulo }
+    '<<'    { Punctuator LShift } 
+    '>>'    { Punctuator RShift } 
+    '<'     { Punctuator Lt     }
+    '<='    { Punctuator Le     }
+    '>'     { Punctuator Gt     }
+    '>='    { Punctuator Ge     }
+    '=='    { Punctuator Eq     }
+    '!='    { Punctuator Neq    }
+    '^'     { Punctuator BitXor }
+    '&&'    { Punctuator LAnd   }
+    '||'    { Punctuator LOr    }
+    ';'     { Punctuator Semi   }
+    '='     { Punctuator Assign }
+    ','     { Punctuator Comma  }
+    '.'     { Punctuator Dot }
+    ':'     { Punctuator Colon}
 
-    '++'    { PlusPlus }
-    '--'    { MinusMinus }
-    '?'     { Question  }
-    '...'   { Variadic  }
-    '*='    { TimesAssign }
-    '/='    { DivAssign}
-    '%='    { ModAssign}
-    '+='    { PlusAssign}
-    '-='    { MinusAssign}
-    '<<='   { LShiftAssign}
-    '>>='   { RShiftAssign}
-    '&='    { AndAssign}
-    '^='    { XorAssign}
-    '|='    { OrAssign}
-    '#'     { Stringize }
-    '##'    { TokenPaste}
+    '++'    { Punctuator PlusPlus }
+    '--'    { Punctuator MinusMinus }
+    '?'     { Punctuator Question  }
+    '...'   { Punctuator Variadic  }
+    '*='    { Punctuator TimesAssign }
+    '/='    { Punctuator DivAssign}
+    '%='    { Punctuator ModAssign}
+    '+='    { Punctuator PlusAssign}
+    '-='    { Punctuator MinusAssign}
+    '<<='   { Punctuator LShiftAssign}
+    '>>='   { Punctuator RShiftAssign}
+    '&='    { Punctuator AndAssign}
+    '^='    { Punctuator XorAssign}
+    '|='    { Punctuator OrAssign}
+    '#'     { Punctuator Stringize }
+    '##'    { Punctuator TokenPaste}
 
 
 -- %name declaration Declaration
@@ -742,9 +743,10 @@ parseError (t, tokens) = error $ "something failed :(, failed on token: \"" ++  
 
 
 
-
+{-
 lexer :: (Error String :> es, State AlexState :> es, State SymbolTable :> es) =>  (Token -> Eff es a) -> Eff es a
-lexer = (alexMonadScan >>=)
+lexer = (preprocess >>=)
+-}
 
 --parseError :: Error String :> es => Token -> Eff es a
 --parseError t = error "failure :("
