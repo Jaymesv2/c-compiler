@@ -1,4 +1,11 @@
 {
+    
+{-
+    This module implements the c preprocessor.
+    
+
+
+-}
 -- The dreaded monomorphism restriction
 {-# LANGUAGE NoMonomorphismRestriction #-}   
 
@@ -22,15 +29,13 @@ import qualified Data.Text as T
 import Data.Text.IO qualified as TIO
 
 --import Text.ParserCombinators.ReadP
-
 }
 
 
 -- %monad {(Error String :> es, State AlexState :> es, State SymbolTable :> es) }  {Eff es} {>>=} {return}
 %monad {(IOE :> es, Error String :> es, State AlexState :> es, State PreprocessorState :> es) }  {Eff es} {>>=} {return}
 
-%lexer {lexer} {PPNewline}
---%lexer {(alexMonadScan >>=)} {EOF}
+%lexer {lexer} {PPSpecial PPNewline}
 
 %errorhandlertype explist
 %error {parseError}
@@ -119,6 +124,7 @@ Line :: { PPLine }
     : -- IfSection
       ControlLine       { ControlLine $1 }
     | TextLine          { TextLine $1  }
+    | '#' ident         { NonDirective $2 }
     | ppeof             { PPSEnd }
 
 {-
@@ -192,7 +198,7 @@ data PPLine
     = IfLine PPIfLine
     | ControlLine PPControlLine
     | TextLine [PPToken]
-    | NonDirective
+    | NonDirective Identifier
     | PPSEnd
     deriving stock (Eq, Show)
 
@@ -215,6 +221,7 @@ data PPControlLine
     | CLError [PPToken]
     | CLPragma [PPToken]
     | CLEmpty
+    | CLParseError
     deriving stock (Eq, Show)
 
 
@@ -236,7 +243,7 @@ data PreprocessorState = PreprocessorState
     }
 
 newPreprocessorState :: PreprocessorState
-newPreprocessorState = PreprocessorState{lexStack = [], macroSymTbl = M.empty, outQueue = [], buf = S.empty, concatLookahead = PPNewline}
+newPreprocessorState = PreprocessorState{lexStack = [], macroSymTbl = M.empty, outQueue = [], buf = S.empty, concatLookahead = PPSpecial PPNewline}
 
 handleInclude :: (IOE :> es, State PreprocessorState :> es, Error String :> es, State AlexState :> es) => [PPToken] -> Eff es ()
 handleInclude toks = do
@@ -277,7 +284,13 @@ handleLine line = case line of
             pure []
         ControlLine (CLPragma _) -> do
             pure []
-        ControlLine (CLEmpty) -> do
+        ControlLine CLEmpty -> do
+            pure []
+        ControlLine CLParseError -> do
+            liftIO $ print "Encountered a parse error while parsing a control line"
+            pure []
+        NonDirective name -> do
+            liftIO . print $ "Encountered invalid directive \"" ++ (T.unpack name) ++ "\", ignoring"
             pure []
         PPSEnd -> do
             s@PreprocessorState{lexStack = ls} <- get
@@ -324,9 +337,8 @@ ppNextToken = do
 runPreprocessor :: (State AlexState :> es, Error String :> es) => Eff (State SymbolTable ': State PreprocessorState ': es) a -> Eff es a
 runPreprocessor = evalState newPreprocessorState . evalState [M.empty]
 
-
-
-
+--runPreprocessor' :: T.Text -> Eff (State SymbolTable ': State PreprocessorState ': es) a -> Eff es a
+--runPreprocessor' inp = runAlex inp . evalState newPreprocessorState . evalState [M.empty]
 
 
 
@@ -378,7 +390,9 @@ preprocess = do
             "_Bool" -> Keyword TuBool
             "_Complex" -> Keyword TuComplex
             i -> Ident i
-        PPNewline -> preprocess
+        --PPNewline -> preprocess
+        PPSpecial PPNewline -> preprocess
+        PPSpecial PPSLParen -> pure $ Punctuator LParen
         PPEOF -> pure EOF
 
 

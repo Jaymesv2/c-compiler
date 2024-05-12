@@ -1,10 +1,10 @@
-module Compiler.Parser.Tokens (Identifier, PPToken(..), PPSpecial (..), Punctuator (..), Keyword (..), Token (..), FloatingConstant (..), Size (..), FloatSize (..), NumRep (..), Sign (..), Constant (..)) where
+module Compiler.Parser.Tokens (Identifier, PPToken (..), PPSpecial (..), Punctuator (..), Keyword (..), Token (..), FloatingConstant (..), Size (..), FloatSize (..), NumRep (..), Sign (..), Constant (..)) where
 
 import Data.Text qualified as T
 
 type Identifier = T.Text
 
-data PPToken 
+data PPToken
   = PPHeaderName T.Text
   | PPIdent Identifier
   | PPNumber T.Text
@@ -12,11 +12,10 @@ data PPToken
   | PPStringLiteral T.Text
   | PPPunctuator Punctuator
   | PPOther T.Text
-  | PPNewline
-  | PPSpecial PPSpecial
+  | -- | PPNewline
+    PPSpecial PPSpecial
   | PPEOF
   deriving stock (Eq)
-
 
 instance Show PPToken where
   show (PPHeaderName n) = T.unpack n
@@ -26,20 +25,17 @@ instance Show PPToken where
   show (PPStringLiteral s) = "\"" ++ T.unpack s ++ "\""
   show (PPPunctuator p) = show p
   show (PPOther t) = T.unpack t
-  show (PPSpecial s) = "special"
-  show (PPNewline) = "NL"
+  show (PPSpecial PPSLParen) = "("
+  show (PPSpecial PPNewline) = "NL"
   show PPEOF = "EOF"
-
-
-
 
 data PPSpecial
   = PPSLParen
+  | PPNewline
   deriving stock (Eq, Show)
 
 data Token
-  = 
-    Ident Identifier -- T.Text
+  = Ident Identifier -- T.Text
   | TTypeName Identifier
   | TEnumConst Identifier
   | StringLiteral T.Text
@@ -48,10 +44,8 @@ data Token
   | Keyword Keyword
   | EOF
   deriving stock (Eq, Show)
-   -- operations
 
-
-
+-- operations
 
 data Sign = Signed | Unsigned
   deriving stock (Eq, Show)
@@ -93,8 +87,8 @@ data FloatingConstant
   | LFloat T.Text
   deriving stock (Eq, Show)-}
 
-data Keyword = 
-    Auto
+data Keyword
+  = Auto
   | Break
   | Case
   | Const
@@ -132,7 +126,7 @@ data Keyword =
   | TUnsigned
   | TuComplex
   | TuImaginary
-  deriving stock (Eq, Show)
+  deriving stock (Eq)
 
 data Punctuator
   = LBrace
@@ -147,8 +141,8 @@ data Punctuator
   | Comma
   | Dot
   | Arrow
-  --project1.c
-  | Stringize
+  | -- project1.c
+    Stringize
   | TokenPaste
   | BitXor
   | BitOr
@@ -187,10 +181,52 @@ data Punctuator
   | Neq
   | LAnd
   | LOr
-   -- primitive types
-  deriving stock Eq
+  -- primitive types
+  deriving stock (Eq)
+
+instance Show Keyword where
+  show kw =
+    case kw of
+      Auto -> "auto"
+      Break -> "break"
+      Case -> "case"
+      Const -> "const"
+      Continue -> "continue"
+      Default -> "default"
+      Do -> "do"
+      Else -> "else"
+      Enum -> "enum"
+      Extern -> "extern"
+      For -> "for"
+      Goto -> "goto"
+      If -> "if"
+      Inline -> "inline"
+      Register -> "register"
+      Restrict -> "restrict"
+      Return -> "return"
+      Sizeof -> "sizeof"
+      TStatic -> "tstatic"
+      Struct -> "struct"
+      Switch -> "switch"
+      TypeDef -> "typedef"
+      Union -> "union"
+      Volatile -> "volatile"
+      While -> "while"
+      Void -> "void"
+      TChar -> "tchar"
+      TShort -> "tshort"
+      TInt -> "int"
+      TLong -> "long"
+      TFloat -> "float"
+      TDouble -> "double"
+      TuBool -> "bool"
+      TSigned -> "signed"
+      TUnsigned -> "unsigned"
+      TuComplex -> "_Complex"
+      TuImaginary -> "_Imaginary"
+
 instance Show Punctuator where
-  show punct = 
+  show punct =
     case punct of
       LBrace -> "{"
       RBrace -> "}"

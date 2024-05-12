@@ -164,15 +164,6 @@ $qchar = [^\n\"]
 
 
 tokens :-
-
--- <0> ^"#include"               { ppspecial Include }
--- <0> ^"#define"                { ppspecial Define }
--- <0> ^"#undef"                 { ppspecial Undef }
--- <0> ^"#line"                  { ppspecial Line }
--- <0> ^"#error"                 { ppspecial PPSError }
--- <0> ^"#pragma"                { ppspecial Pragma }
--- <0> ^"#"                      { ppspecial PPSEmpty }
-
 <0> "{"                       { punctuator LBrace }
 <0> "}"                       { punctuator RBrace }
 <0> [$white]^"("              { punctuator LParen }
@@ -234,8 +225,9 @@ tokens :-
 
 <0>  ([^$white] # [$nondigit $digit \'\" \( \) \{ \} \[ \] \| \* \+ \~ \- \; \, \? \. \^ \/ \# \> \< & \% ! = : ]) [^$white]*  { \(_,_,_,t) i -> pure $ PPOther (T.take i t)}
 
-        -- headernames
--- <0>  "<" [^\n>]+ ">"              { \(_,_,_,t) i -> pure $ error "d" }
+-- this is a hack and I dont like it but it works :/
+-- headernames
+<0>  [\<]^[^\n>]+ ">"              { \(_,_,_,t) i -> pure $ PPHeaderName (T.take (i-1) t) }
 -- <0>  \" [^\n\"] \"           { \(_,_,_,t) i -> pure $ error "e" }
 
         -- preprocessing numbers
@@ -245,7 +237,7 @@ tokens :-
 
 
 <0>  \\\n ; -- dont emit a newline if (physical line concatenation)
-<0>  \n {\(_,_,_,t) i -> pure $ PPNewline}
+<0>  \n {\(_,_,_,t) i -> pure $ PPSpecial PPNewline}
 -- <0>  [\n] {\(_,_,_,t) i -> pure $ PPNewline}
 
 
