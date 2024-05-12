@@ -164,43 +164,43 @@ import Effectful.State.Static.Local
 %%
 
 PrimaryExpr :: { Expr }
-    : ident         { EIdent $1         :: Expr }
-    | constant      { EConstant $1      :: Expr}
-    | stringlit     { EStringLiteral $1 :: Expr }
-    | '(' Expr ')'  { $2                :: Expr }
+    : ident                                 { EIdent $1         :: Expr }
+    | constant                              { EConstant $1      :: Expr}
+    | stringlit                             { EStringLiteral $1 :: Expr }
+    | '(' Expr ')'                          { $2                :: Expr }
 
 
 PostfixExpr  :: { Expr }
-    : PrimaryExpr               { $1                :: Expr }
-    | PostfixExpr '[' Expr ']'  { (Bracketed $1 $3) :: Expr }
+    : PrimaryExpr                           { $1                :: Expr }
+    | PostfixExpr '[' Expr ']'              { (Bracketed $1 $3) :: Expr }
 
     -- prob a better way to do this 
-    | PostfixExpr '(' ')'               { Called $1 []              :: Expr }
-    | PostfixExpr '(' ArgExprList ')'   { Called $1 (reverse $3)    :: Expr }
+    | PostfixExpr '(' ')'                   { Called $1 []              :: Expr }
+    | PostfixExpr '(' ArgExprList ')'       { Called $1 (reverse $3)    :: Expr }
 
-    | PostfixExpr '.' ident             { (DotE $1 $3)          :: Expr }
-    | PostfixExpr '->' ident            { (ArrowE $1 $3)        :: Expr }
-    | PostfixExpr '++'                  { (UnaryE UPostIncr $1) :: Expr }
-    | PostfixExpr '--'                  { (UnaryE UPostDecr $1) :: Expr }
+    | PostfixExpr '.' ident                 { (DotE $1 $3)          :: Expr }
+    | PostfixExpr '->' ident                { (ArrowE $1 $3)        :: Expr }
+    | PostfixExpr '++'                      { (UnaryE UPostIncr $1) :: Expr }
+    | PostfixExpr '--'                      { (UnaryE UPostDecr $1) :: Expr }
     -- evil type casts :/
     -- | '(' ident ')' '{' InitializerList '}'
     -- | '(' ident ')' '{' InitializerList ',' '}'
 
 UnaryOp  :: { UnaryOp }
-    : '&' { URef        :: UnaryOp }
-    | '*' { UDeref      :: UnaryOp }
-    | '~' { UCompliment :: UnaryOp }
-    | '!' { UNot        :: UnaryOp }
-    | '+' { UPlus       :: UnaryOp }
-    | '-' { UMinus      :: UnaryOp }
+    : '&'                                   { URef        :: UnaryOp }
+    | '*'                                   { UDeref      :: UnaryOp }
+    | '~'                                   { UCompliment :: UnaryOp }
+    | '!'                                   { UNot        :: UnaryOp }
+    | '+'                                   { UPlus       :: UnaryOp }
+    | '-'                                   { UMinus      :: UnaryOp }
 
 
 UnaryExpr :: { Expr }
-    : PostfixExpr               { $1                    :: Expr }
-    | '++' UnaryExpr            { UnaryE UPreIncr $2    :: Expr }
-    | '--' UnaryExpr            { UnaryE UPreDecr $2    :: Expr }
+    : PostfixExpr                           { $1                    :: Expr }
+    | '++' UnaryExpr                        { UnaryE UPreIncr $2    :: Expr }
+    | '--' UnaryExpr                        { UnaryE UPreDecr $2    :: Expr }
 
-    | UnaryOp CastExpr          { UnaryE $1 $2          :: Expr }
+    | UnaryOp CastExpr                      { UnaryE $1 $2          :: Expr }
     {-| '&' CastExpr { UnaryE URef $2        :: Expr }
     | '*' CastExpr { UnaryE UDeref $2      :: Expr }
     | '~' CastExpr { UnaryE UCompliment $2 :: Expr }
@@ -208,18 +208,18 @@ UnaryExpr :: { Expr }
     | '+' CastExpr { UnaryE UPlus $2       :: Expr }
     | '-' CastExpr { UnaryE UMinus $2      :: Expr }
     -}
-    | sizeof UnaryExpr          { UnaryE USizeof $2     :: Expr }
-    | sizeof '(' TypeName ')'   { SizeofTypeE $3        :: Expr }
+    | sizeof UnaryExpr                      { UnaryE USizeof $2     :: Expr }
+    | sizeof '(' TypeName ')'               { SizeofTypeE $3        :: Expr }
 
 CastExpr :: { Expr }
-    : UnaryExpr                 { $1            :: Expr }
-    | '(' TypeName ')' CastExpr { CastE $2 $4   :: Expr}
+    : UnaryExpr                             { $1            :: Expr }
+    | '(' TypeName ')' CastExpr             { CastE $2 $4   :: Expr}
 
 MultiplicativeExpr   :: { Expr }
-    : CastExpr                          { $1                    :: Expr } 
-    | MultiplicativeExpr '*' CastExpr   { BinaryOp $1 BMul $3   :: Expr }
-    | MultiplicativeExpr '/' CastExpr   { BinaryOp $1 BDiv $3   :: Expr }
-    | MultiplicativeExpr '%' CastExpr   { BinaryOp $1 BMod $3   :: Expr }
+    : CastExpr                              { $1                    :: Expr } 
+    | MultiplicativeExpr '*' CastExpr       { BinaryOp $1 BMul $3   :: Expr }
+    | MultiplicativeExpr '/' CastExpr       { BinaryOp $1 BDiv $3   :: Expr }
+    | MultiplicativeExpr '%' CastExpr       { BinaryOp $1 BMod $3   :: Expr }
 
 AdditiveExpr  :: { Expr }   
     : MultiplicativeExpr                    { $1                    :: Expr }
@@ -227,9 +227,9 @@ AdditiveExpr  :: { Expr }
     | AdditiveExpr '-' MultiplicativeExpr   { BinaryOp $1 BSub $3   :: Expr }
 
 ShiftExpr    :: { Expr }
-    : AdditiveExpr                              { $1                        :: Expr }
-    | ShiftExpr '<<' AdditiveExpr               { BinaryOp $1 BShiftL $3    :: Expr }
-    | ShiftExpr '>>' AdditiveExpr               { BinaryOp $1 BShiftR $3    :: Expr }
+    : AdditiveExpr                          { $1                        :: Expr }
+    | ShiftExpr '<<' AdditiveExpr           { BinaryOp $1 BShiftL $3    :: Expr }
+    | ShiftExpr '>>' AdditiveExpr           { BinaryOp $1 BShiftR $3    :: Expr }
 
 RelationalExpr   :: { Expr }
     : ShiftExpr                             { $1                    :: Expr }
@@ -244,26 +244,26 @@ EqualityExpr :: { Expr }
     | EqualityExpr '!=' RelationalExpr      { BinaryOp $1 Bneq $3   :: Expr }
 
 AndExpr  :: { Expr }
-    : EqualityExpr                                  { $1                    :: Expr }
-    | AndExpr '&' EqualityExpr                      {BinaryOp $1 BBitAnd $3 :: Expr }
+    : EqualityExpr                          { $1                    :: Expr }
+    | AndExpr '&' EqualityExpr              {BinaryOp $1 BBitAnd $3 :: Expr }
 
 XorExpr  :: { Expr }
-    : AndExpr                                       { $1                    :: Expr }
-    | XorExpr '^' AndExpr                           {BinaryOp $1 BBitXor $3 :: Expr }
+    : AndExpr                               { $1                    :: Expr }
+    | XorExpr '^' AndExpr                   {BinaryOp $1 BBitXor $3 :: Expr }
 
 OrExpr   :: { Expr }
-    : XorExpr                                       { $1                    :: Expr }
-    | OrExpr '|' XorExpr                            {BinaryOp $1 BBitOr $3  :: Expr }
+    : XorExpr                               { $1                    :: Expr }
+    | OrExpr '|' XorExpr                    {BinaryOp $1 BBitOr $3  :: Expr }
 
 -- Expr
 LAndExpr     :: { Expr }
-    : OrExpr                { $1                            :: Expr }
-    | LAndExpr  '&&' OrExpr { BinaryOp $1 BLogicalAnd $3    :: Expr }
+    : OrExpr                                { $1                            :: Expr }
+    | LAndExpr  '&&' OrExpr                 { BinaryOp $1 BLogicalAnd $3    :: Expr }
 
 -- Expr
 LOrExpr      :: { Expr }
-    : LAndExpr                  { $1                        :: Expr }
-    | LOrExpr '||' LAndExpr     { BinaryOp $1 BLogicalOr $3 :: Expr }
+    : LAndExpr                              { $1                        :: Expr }
+    | LOrExpr '||' LAndExpr                 { BinaryOp $1 BLogicalOr $3 :: Expr }
 
 -- could add ternary operator here
 ConditionalExpr :: { Expr }
