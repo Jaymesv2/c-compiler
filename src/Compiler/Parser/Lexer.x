@@ -2,10 +2,10 @@
 -- {-# LANGUAGE NoMonomorphismRestriction #-}
 module Compiler.Parser.Lexer (alexMonadScan, runAlex, AlexState, newAlexState, printTokens) where
 
-import Control.Applicative as App (Applicative (..))
-import Data.Maybe
+--import Control.Applicative as App (Applicative (..))
+--import Data.Maybe
 import Data.Functor
-import Data.Text qualified
+--import Data.Text qualified
 import Data.Word (Word8)
 
 import Data.Bits qualified
@@ -13,7 +13,7 @@ import Data.Char (ord)
 
 
 import qualified Data.Text as T
-import qualified Data.List as L
+--import qualified Data.List as L
 import qualified Data.Map as M
 
 
@@ -218,7 +218,7 @@ tokens :-
 -- wide string literals
 <0>  "L\"" @schar+ \"              { \(_,_,_,t) i -> pure $ PPStringLiteral (T.take (i-3) (T.tail . T.tail $ t)) } 
 
-<0>  \' @cchar+ \'          { \(_,_,_,t) i -> pure $ PPCharConst (T.take i t)}
+<0>  \' @cchar+ \'          { \(_,_,_,t) i -> pure $ PPCharConst (T.take (i-2) (T.tail t))}
 
 
 <0>  $nondigit $identnondigit* { \(_,_,_,t) i -> pure $ PPIdent (T.take i t) }
@@ -227,7 +227,7 @@ tokens :-
 
 -- this is a hack and I dont like it but it works :/
 -- headernames
-<0>  [\<]^[^\n>]+ ">"              { \(_,_,_,t) i -> pure $ PPHeaderName (T.take (i-1) t) }
+<0>  "<" [^\n>]+ ">"              { \(_,_,_,t) i -> pure $ PPHeaderName (T.take (i-2) (T.tail t)) }
 -- <0>  \" [^\n\"] \"           { \(_,_,_,t) i -> pure $ error "e" }
 
         -- preprocessing numbers
@@ -237,7 +237,7 @@ tokens :-
 
 
 <0>  \\\n ; -- dont emit a newline if (physical line concatenation)
-<0>  \n {\(_,_,_,t) i -> pure $ PPSpecial PPNewline}
+<0>  \n {\_ _ -> pure $ PPSpecial PPNewline}
 -- <0>  [\n] {\(_,_,_,t) i -> pure $ PPNewline}
 
 
@@ -350,23 +350,24 @@ alexMonadScan = do
       alexSetInput inp__'
       action (ignorePendingBytes inp__) len
 
+
 -- -----------------------------------------------------------------------------
 -- Useful token actions
 
 -- just ignore this token and scan another one
 -- skip :: AlexAction result
-skip input len = alexMonadScan
+skip _ _ = alexMonadScan
 
 -- ignore this token, but set the start code to a new value
 -- begin :: Int -> AlexAction result
-begin code input len = do alexSetStartCode code; alexMonadScan
+begin code _ _ = do alexSetStartCode code; alexMonadScan
 
 -- perform an action for this token, and set the start code to a new value
 -- andBegin :: AlexAction result -> Int -> AlexAction result
 (action `andBegin` code) input len = do alexSetStartCode code; action input len
 
 -- token :: (String -> Int -> token) -> AlexAction token
-token t input len = return (t input len)
+-- token t input len = return (t input len)
 
 {-
 -}

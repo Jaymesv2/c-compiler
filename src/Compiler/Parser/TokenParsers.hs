@@ -7,27 +7,13 @@ import Text.Parsec.Prim
 
 import Data.Functor
 
--- import Control.Applicative hiding (many)
--- import Control.Monad
-
--- import Compiler.Parser
--- import Compiler.Parser.Lexer
--- import Compiler.Parser.Tokens
-import Data.List qualified as L
-
--- import qualified Data.Sequence as S
--- import qualified Data.Map as M
+-- import Data.List qualified as L
 
 import Data.Text qualified as T
 
 import Data.Char
 
--- import Data.Text.Internal.Builder.Int.Digits (digits)
 import Text.Parsec
-
--- import Text.Parsec.Char
--- import Text.Parsec.Combinator
--- import Text.Parsec.Prim
 
 {-
 digit :: Stream s m Char => ParsecT s u m Char
@@ -87,6 +73,7 @@ integerSuffix = do
         , liftA2 (,) longlongSuffix $ option Signed unsignedSuffix
         ]
 
+{-
 floatingConstant :: Parsec T.Text () Constant
 floatingConstant = choice [hexFloatingConstant, decimalFloatingConstant] -- , hexFloatingConstant]
 
@@ -138,3 +125,5 @@ floatSign = choice [char '+' $> Signed, char '-' $> Unsigned]
 
 floatingSuffix :: Parsec T.Text () FloatSize
 floatingSuffix = choice [oneOf "fF" $> Float, oneOf "lL" $> LongDouble]
+
+-}

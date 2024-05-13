@@ -1,7 +1,6 @@
 module Compiler.Parser.Preprocessor (preprocess, PreprocessorState, printPPTokens, runPreprocessor) where
 
 import Compiler.Parser.PreprocessorGrammar
-import Control.Monad
 
 import Data.Functor
 import Data.Maybe
@@ -17,8 +16,11 @@ import Effectful.State.Static.Local
 
 import Data.Sequence qualified as S
 
+import Data.List qualified as L
 import Data.Map qualified as M
+
 import Data.Text qualified as T
+
 import Data.Text.IO qualified as TIO
 
 data MacroDef = ObjectMacro [PPToken] | FuncMacro [Identifier] Bool [PPToken]
@@ -166,16 +168,67 @@ handleLine line = case line of
                 put (s{lexStack = t})
                 pure []
 
-expandTokenLine :: M.Map T.Text MacroDef -> [PPToken] -> [PPToken {- :: (State AlexState :> es, Error String :> es, State PreprocessorState :> es) => Eff es () -}]
-expandTokenLine macros = go
+expandTokenLine :: M.Map T.Text MacroDef -> [PPToken] -> Either () [PPToken {- :: (State AlexState :> es, Error String :> es, State PreprocessorState :> es) => Eff es () -}]
+expandTokenLine macros = go []
   where
-    go [] = []
-    go ((PPStringLiteral s1) : (PPStringLiteral s2) : t) = go $ PPStringLiteral (T.append s1 s2) : t
-    go ((PPIdent ident) : t) = case M.lookup ident macros of
-        Nothing -> PPIdent ident : go t
-        Just (ObjectMacro replacementList) -> replacementList ++ go t
-        Just (FuncMacro _args _variadic _replacementList) -> PPIdent ident : go t
-    go (h : t) = h : go t
+    go acc [] = Right (reverse acc)
+    go acc ((PPStringLiteral s1) : (PPStringLiteral s2) : t) = go (PPStringLiteral (T.append s1 s2) : acc) t
+    go acc ((PPIdent ident) : t) = case M.lookup ident macros of
+        Nothing -> go (PPIdent ident : acc) t
+        Just (ObjectMacro replacementList) -> go (replacementList ++ acc) t
+        Just (FuncMacro args variadic replacementList) -> expandFuncMacro args variadic replacementList t >>= \(list, remToks) -> go (list ++ acc) remToks
+    go acc (h : t) = go (h : acc) t
+
+    -- returns (if it there is another param, the argument, the tokens)
+    getArg' :: Int -> [PPToken] -> Bool -> [PPToken] -> Either [PPToken] (Bool, [PPToken], [PPToken])
+    getArg' 0 acc False (PPPunctuator Comma : t) = Right (True, reverse acc, t)
+    getArg' 0 acc _ (PPPunctuator RParen : t) = Right (False, reverse acc, t)
+    getArg' n acc ignoreCommas (PPPunctuator RParen : t) = getArg' (n - 1) (PPPunctuator RParen : acc) ignoreCommas t
+    getArg' n acc ignoreCommas (PPSpecial PPSLParen : t) = getArg' (n + 1) (PPSpecial PPSLParen : acc) ignoreCommas t
+    getArg' n acc ignoreCommas (h : t) = getArg' n (h : acc) ignoreCommas t
+    getArg' _ acc _ [] = Left $ reverse acc
+
+    getArg :: Bool -> [PPToken] -> Either [PPToken] (Bool, [PPToken], [PPToken])
+    getArg = getArg' 0 []
+
+    -- splits the args
+    getFuncMacroArgs' :: [[PPToken]] -> [PPToken] -> Either () ([[PPToken]], [PPToken])
+    getFuncMacroArgs' acc toks = case getArg False toks of
+        Left _ -> Left ()
+        Right (True, arg, remToks) -> getFuncMacroArgs' (arg : acc) remToks
+        Right (False, arg, remToks) -> Right (reverse $ arg : acc, remToks)
+
+    -- getFuncMacroArgs' ((h, arg) : acc) t variadic remToks
+    -- getFuncMacroArgs' acc (h : t) variadic toks = error ""
+    -- if it is variadic then get the rest
+    {-getFuncMacroArgs' acc [] True toks = case getArg True toks of
+        Left _ -> Left ()
+        Right (_, arg, remToks) -> Right (("__VA_ARG__", arg) : acc, remToks)-}
+    -- getFuncMacroArgs' acc toks = error ""
+
+    expandFuncMacro :: [Identifier] -> Bool -> [PPToken] -> [PPToken] -> Either () ([PPToken], [PPToken])
+    -- expandFuncMacro argNames variadic replacementList (PPSpecial PPSLParen : toks) = do
+    expandFuncMacro argNames variadic replacementList toks = do
+        toks' <- case toks of
+            PPSpecial PPSLParen : t -> Right t
+            PPPunctuator LParen : t -> Right t
+            _ -> Left ()
+
+        (args, remToks) <- getFuncMacroArgs' [] toks'
+        pairs <- zipArgs [] argNames args
+        let newMacros = L.foldl' (\acc (name, body) -> M.insert name (ObjectMacro body) acc) macros pairs
+        expandedReplacementList <- expandTokenLine newMacros replacementList
+        pure (reverse expandedReplacementList, remToks)
+      where
+        zipArgs :: [(Identifier, [PPToken])] -> [Identifier] -> [[PPToken]] -> Either () [(Identifier, [PPToken])]
+        zipArgs acc (hi : ti) (ha : ta) = zipArgs ((hi, ha) : acc) ti ta
+        -- correct number of args
+        zipArgs acc [] [] | variadic = Right (("__VA_ARGS__", []) : acc)
+        zipArgs acc [] [] = Right acc
+        -- extra args
+        zipArgs acc [] remArgs@(_ : _) | variadic = Right $ ("__VA_ARGS__", L.intercalate [PPPunctuator Comma] remArgs) : acc
+        zipArgs _ [] (_ : _) = Left ()
+        zipArgs _ _ [] = Left ()
 
 -- gets a token from the token queue and refills the queue if it is empty
 ppNextToken :: (IOE :> es, State PreprocessorState :> es, Error String :> es, State AlexState :> es, State SymbolTable :> es) => Eff es PPToken
@@ -190,8 +243,11 @@ ppNextToken = do
             PPEOF -> pure PPEOF
             _ -> do
                 tokenLine <- parseLine >>= handleLine
-                modify (\s' -> s'{outQueue = expandTokenLine mst tokenLine})
-                ppNextToken
+                case expandTokenLine mst tokenLine of
+                    Left () -> throwError "failed to expande tokens"
+                    Right expanded -> do
+                        modify (\s' -> s'{outQueue = expanded})
+                        ppNextToken
 
 runPreprocessor :: (State AlexState :> es, Error String :> es) => Eff (State SymbolTable ': State PreprocessorState ': es) a -> Eff es a
 runPreprocessor = evalState newPreprocessorState . evalState [M.empty]
