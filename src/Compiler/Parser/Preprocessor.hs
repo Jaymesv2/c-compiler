@@ -64,6 +64,7 @@ skipIfBlock skipToEnd = go 0
   where
     -- when skipToEnd is false, return at the next the next elif/else/endif
     -- when skipToEnd is true, return at the next the next endif
+    go :: (State PreprocessorState :> es, State AlexState :> es, Error String :> es) => Int -> Eff es PPIfLine
     go nesting =
         parseLine >>= \case
             IfLine l -> case l of
@@ -89,17 +90,17 @@ handleIfLine :: (IOE :> es, State PreprocessorState :> es, Error String :> es, S
 handleIfLine ifl = do
     PreprocessorState{mode = m} <- get @PreprocessorState
     case ifl of
-        ILIf toks -> error "#if is unimplemented"
+        ILIf _toks -> error "#if is unimplemented"
         ILIfDef ident ->
             -- if the branch isnt taken skip to the next #elif or
             maybeTakeBranch False . isJust . M.lookup ident . (\PreprocessorState{macroSymTbl = s} -> s) =<< get
         ILIfNDef ident ->
             maybeTakeBranch False . isNothing . M.lookup ident . (\PreprocessorState{macroSymTbl = s} -> s) =<< get
-        ILElIf toks -> case m of
+        ILElIf _toks -> case m of
             -- the previous branch was taken so skip to the end
             InBranchMode : _ -> skipIfBlock True $> ()
             -- previous branch was skipped, so check the conditional
-            SkipBranchMode : t -> throwError "Taking #elif branches is unimplemented"
+            SkipBranchMode : _t -> throwError "Taking #elif branches is unimplemented"
             [] -> throwError "unexpected #elif"
         -- elif can set the state to EndBranchMode when it ends
         ILElse -> case m of
@@ -143,15 +144,15 @@ handleLine line = case line of
         modify (\s@PreprocessorState{macroSymTbl = mSymTbl} -> s{macroSymTbl = M.delete name mSymTbl})
         pure []
     ControlLine (CLLine _) -> do
-        pure []
+        throwError "Line control is unimplemented"
     ControlLine (CLError _) -> do
-        pure []
+        throwError "Compile errors are is unimplemented"
     ControlLine (CLPragma _) -> do
-        pure []
+        throwError "Pragmas are is unimplemented"
     ControlLine CLEmpty -> do
         pure []
     ControlLine CLParseError -> do
-        liftIO $ print "Encountered a parse error while parsing a control line"
+        liftIO $ print ("Encountered a parse error while parsing a control line" :: T.Text)
         pure []
     NonDirective name -> do
         liftIO . print $ "Encountered invalid directive \"" ++ T.unpack name ++ "\", ignoring"
@@ -173,7 +174,7 @@ expandTokenLine macros = go
     go ((PPIdent ident) : t) = case M.lookup ident macros of
         Nothing -> PPIdent ident : go t
         Just (ObjectMacro replacementList) -> replacementList ++ go t
-        Just (FuncMacro args variadic replacementList) -> PPIdent ident : go t
+        Just (FuncMacro _args _variadic _replacementList) -> PPIdent ident : go t
     go (h : t) = h : go t
 
 -- gets a token from the token queue and refills the queue if it is empty
@@ -202,13 +203,13 @@ preprocess :: (IOE :> es, Error String :> es, State AlexState :> es, State Prepr
 preprocess = do
     nextToken <- ppNextToken
     case nextToken of
-        PPHeaderName x -> error ""
-        PPOther o -> error ""
+        PPHeaderName _x -> error ""
+        PPOther _o -> error ""
         PPNumber n -> do
             -- liftIO . print $ "num const" ++ show n
             liftIO . print $ n
             case parseNumConstant n of
-                Left err -> throwError "failed to parse num constant"
+                Left _err -> throwError "failed to parse num constant"
                 Right c -> pure $ Constant c
         PPCharConst c -> pure $ Constant $ CharConst c
         PPStringLiteral s -> pure $ StringLiteral s

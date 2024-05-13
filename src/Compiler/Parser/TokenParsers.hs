@@ -7,12 +7,12 @@ import Text.Parsec.Prim
 
 import Data.Functor
 
-import Control.Applicative hiding (many)
-import Control.Monad
+-- import Control.Applicative hiding (many)
+-- import Control.Monad
 
 -- import Compiler.Parser
 -- import Compiler.Parser.Lexer
-import Compiler.Parser.Tokens
+-- import Compiler.Parser.Tokens
 import Data.List qualified as L
 
 -- import qualified Data.Sequence as S
@@ -22,11 +22,12 @@ import Data.Text qualified as T
 
 import Data.Char
 
-import Data.Text.Internal.Builder.Int.Digits (digits)
+-- import Data.Text.Internal.Builder.Int.Digits (digits)
 import Text.Parsec
-import Text.Parsec.Char
-import Text.Parsec.Combinator
-import Text.Parsec.Prim
+
+-- import Text.Parsec.Char
+-- import Text.Parsec.Combinator
+-- import Text.Parsec.Prim
 
 {-
 digit :: Stream s m Char => ParsecT s u m Char

@@ -1,11 +1,14 @@
 module Compiler.Parser.Span (Span, Spanned) where
 
+import qualified Data.Text as T
+
 -- Spans contains the absolute position of the start and end of an element
 -- If something does not originate from the source file then it will be an `EmptySpan`
 data Span
     = Span
-        { start :: Int
-        , end :: Int
+        { filename :: T.Text
+        , realstart :: Int
+        , realend :: Int
         , inner :: [Span]
         }
     | EmptySpan

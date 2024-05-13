@@ -23,7 +23,7 @@ import Effectful.State.Static.Local
 
 
 -- %monad {(Error String :> es, State AlexState :> es, State SymbolTable :> es) }  {Eff es} {>>=} {return}
-%monad {(IOE :> es, Error String :> es, State AlexState :> es) }  {Eff es} {>>=} {return}
+%monad {(Error String :> es, State AlexState :> es) }  {Eff es} {>>=} {return}
 
 %lexer {lexer} {PPSpecial PPNewline}
 
@@ -153,11 +153,10 @@ IdentList :: { [Identifier] }
 
 {
 
-
 parseError :: (Error String :> es, State AlexState :> es) => (PPToken, [String]) -> Eff es a
 parseError (t, tokens) = throwError $ "something failed :(, failed on token: \"" ++  show t ++ "\"possible tokens: " ++ show tokens  -- throwError "failure :("
 
-lexer :: (IOE :> es, Error String :> es, State AlexState :> es) =>  (PPToken -> Eff es a) -> Eff es a
+lexer :: (Error String :> es, State AlexState :> es) =>  (PPToken -> Eff es a) -> Eff es a
 lexer = ((alexMonadScan) >>=) 
 --lexer = ((alexMonadScan >>= (\t -> const t <$> (liftIO $ print ( "before: " ++ show t))) ) >>=)
 {-
