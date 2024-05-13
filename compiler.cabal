@@ -124,6 +124,7 @@ executable compiler
     Compiler.Parser.Tokens
     Compiler.Parser.ParseTree
     Compiler.Parser.Preprocessor
+    Compiler.Parser.PreprocessorGrammar
     Compiler.Parser.Lexer
     Compiler.Parser.TokenParsers
     Compiler.Parser

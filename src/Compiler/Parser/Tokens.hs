@@ -17,18 +17,6 @@ data PPToken
   | PPEOF
   deriving stock (Eq)
 
-instance Show PPToken where
-  show (PPHeaderName n) = T.unpack n
-  show (PPIdent n) = T.unpack n
-  show (PPNumber n) = T.unpack n
-  show (PPCharConst c) = T.unpack c
-  show (PPStringLiteral s) = "\"" ++ T.unpack s ++ "\""
-  show (PPPunctuator p) = show p
-  show (PPOther t) = T.unpack t
-  show (PPSpecial PPSLParen) = "("
-  show (PPSpecial PPNewline) = "NL"
-  show PPEOF = "EOF"
-
 data PPSpecial
   = PPSLParen
   | PPNewline
@@ -264,3 +252,15 @@ instance Show Punctuator where
       Neq -> "!="
       LAnd -> "&&"
       LOr -> "||"
+
+instance Show PPToken where
+  show (PPHeaderName n) = T.unpack n
+  show (PPIdent n) = T.unpack n
+  show (PPNumber n) = T.unpack n
+  show (PPCharConst c) = T.unpack c
+  show (PPStringLiteral s) = "\"" ++ T.unpack s ++ "\""
+  show (PPPunctuator p) = show p
+  show (PPOther t) = T.unpack t
+  show (PPSpecial PPSLParen) = "("
+  show (PPSpecial PPNewline) = "NL"
+  show PPEOF = "EOF"
