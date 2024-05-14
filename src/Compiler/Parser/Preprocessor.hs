@@ -21,6 +21,7 @@ import Data.Map qualified as M
 
 import Data.Text qualified as T
 
+import Data.Bits (And (getAnd))
 import Data.Text.IO qualified as TIO
 
 data MacroDef = ObjectMacro [PPToken] | FuncMacro [Identifier] Bool [PPToken]
@@ -68,25 +69,25 @@ skipIfBlock skipToEnd = go 0
     -- when skipToEnd is true, return at the next the next endif
     go :: (State PreprocessorState :> es, State AlexState :> es, Error String :> es) => Int -> Eff es PPIfLine
     go nesting =
-        parseLine >>= \case
-            IfLine l -> case l of
-                -- increase nesting when we enter a new block
-                ILIf _toks -> go $ nesting + 1
-                ILIfDef _ -> go $ nesting + 1
-                ILIfNDef _ -> go $ nesting + 1
-                ILElIf _ | nesting /= 0 -> go nesting -- ignore if it is nested
-                ILElse | nesting /= 0 -> go nesting -- ignore nested
+        do
+            getAndParseLine >>= \case
+                IfLine l -> case l of
+                    -- increase nesting when we enter a new block
+                    ILIf _toks -> go $ nesting + 1
+                    ILIfDef _ -> go $ nesting + 1
+                    ILIfNDef _ -> go $ nesting + 1
+                    ILElIf _ | nesting /= 0 -> go nesting -- ignore if it is nested
+                    ILElse | nesting /= 0 -> go nesting -- ignore nested
 
-                -- if skipToEnd is false and it is at the same level return it
-                ILElIf _toks | not skipToEnd && nesting == 0 -> pure l
-                ILElse | not skipToEnd && nesting == 0 -> pure l
-                ILElse | skipToEnd && nesting == 0 -> go nesting
-                -- corresponding #endif found, return
-                ILEndIf | nesting /= 0 -> go (nesting - 1)
-                ILEndIf | nesting == 0 -> pure l
-                _ -> error "shit and die"
-            -- ignore non control flow lines
-            _ -> go nesting
+                    -- if skipToEnd is false and it is at the same level return it
+                    ILElIf _toks | not skipToEnd && nesting == 0 -> pure l
+                    ILElse | not skipToEnd && nesting == 0 -> pure l
+                    ILElse | skipToEnd && nesting == 0 -> go nesting
+                    ILEndIf | nesting /= 0 -> go (nesting - 1)
+                    ILEndIf | nesting == 0 -> pure l
+                    _ -> error "shit and die"
+                -- ignore non control flow lines
+                _ -> go nesting
 
 handleIfLine :: (IOE :> es, State PreprocessorState :> es, Error String :> es, State AlexState :> es) => PPIfLine -> Eff es ()
 handleIfLine ifl = do
@@ -123,6 +124,21 @@ handleIfLine ifl = do
                     >> skipIfBlock shouldSkipToEnd
                     >>= handleIfLine
                     >> pure ()
+
+-- I'm not sure if GHC will tail optimize this
+getPPTokenLine :: (Error String :> es, State AlexState :> es) => Eff es [PPToken]
+getPPTokenLine = do
+    tok <- alexMonadScan
+    case tok of
+        PPSpecial PPNewline -> pure []
+        PPEOF -> pure [tok]
+        _ -> fmap (tok :) getPPTokenLine
+
+getAndParseLine :: (Error String :> es, State AlexState :> es) => Eff es PPLine
+getAndParseLine =
+    getPPTokenLine >>= \case
+        [PPEOF] -> pure PPSEnd
+        other -> parseLine other
 
 handleLine :: (IOE :> es, State PreprocessorState :> es, Error String :> es, State AlexState :> es) => PPLine -> Eff es [PPToken]
 handleLine line = case line of
@@ -198,16 +214,7 @@ expandTokenLine macros = go []
         Right (True, arg, remToks) -> getFuncMacroArgs' (arg : acc) remToks
         Right (False, arg, remToks) -> Right (reverse $ arg : acc, remToks)
 
-    -- getFuncMacroArgs' ((h, arg) : acc) t variadic remToks
-    -- getFuncMacroArgs' acc (h : t) variadic toks = error ""
-    -- if it is variadic then get the rest
-    {-getFuncMacroArgs' acc [] True toks = case getArg True toks of
-        Left _ -> Left ()
-        Right (_, arg, remToks) -> Right (("__VA_ARG__", arg) : acc, remToks)-}
-    -- getFuncMacroArgs' acc toks = error ""
-
     expandFuncMacro :: [Identifier] -> Bool -> [PPToken] -> [PPToken] -> Either () ([PPToken], [PPToken])
-    -- expandFuncMacro argNames variadic replacementList (PPSpecial PPSLParen : toks) = do
     expandFuncMacro argNames variadic replacementList toks = do
         toks' <- case toks of
             PPSpecial PPSLParen : t -> Right t
@@ -242,7 +249,7 @@ ppNextToken = do
         [] -> case lk of
             PPEOF -> pure PPEOF
             _ -> do
-                tokenLine <- parseLine >>= handleLine
+                tokenLine <- getAndParseLine >>= handleLine
                 case expandTokenLine mst tokenLine of
                     Left () -> throwError "failed to expande tokens"
                     Right expanded -> do

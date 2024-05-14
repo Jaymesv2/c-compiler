@@ -14,6 +14,8 @@ import Data.Text qualified as T
 import Compiler.Parser
 import Compiler.Parser.Lexer
 import Compiler.Parser.Tokens
+import Compiler.Parser.ParseTree (Expr (..), UnaryOp (..), BinOp (..), AssignmentOp (..))
+
 
 import Effectful
 import Effectful.Error.Static
@@ -21,11 +23,13 @@ import Effectful.State.Static.Local
 
 }
 
+%name parseLine Line
+--%partial expr Expr
 
--- %monad {(Error String :> es, State AlexState :> es, State SymbolTable :> es) }  {Eff es} {>>=} {return}
-%monad {(Error String :> es, State AlexState :> es) }  {Eff es} {>>=} {return}
+--%monad {(Error String :> es, State AlexState :> es, State SymbolTable :> es) }  {Eff es} {>>=} {return}
+%monad {(Error String :> es) }  {Eff es} {>>=} {return}
 
-%lexer {lexer} {PPSpecial PPNewline}
+--%lexer {lexer} {PPSpecial PPNewline}
 
 %errorhandlertype explist
 %error {parseError}
@@ -72,7 +76,6 @@ How to write the preprocessor:
     The lexer needs handle outputting lines
 -}
 
-%partial parseLine Line
 %%
 
 -- match anything but newlines
@@ -153,11 +156,11 @@ IdentList :: { [Identifier] }
 
 {
 
-parseError :: (Error String :> es, State AlexState :> es) => (PPToken, [String]) -> Eff es a
+parseError :: (Error String :> es) => ([PPToken], [String]) -> Eff es a
 parseError (t, tokens) = throwError $ "something failed :(, failed on token: \"" ++  show t ++ "\"possible tokens: " ++ show tokens  -- throwError "failure :("
 
-lexer :: (Error String :> es, State AlexState :> es) =>  (PPToken -> Eff es a) -> Eff es a
-lexer = ((alexMonadScan) >>=) 
+--lexer :: (Error String :> es, State AlexState :> es) =>  (PPToken -> Eff es a) -> Eff es a
+--lexer = ((alexMonadScan) >>=) 
 --lexer = ((alexMonadScan >>= (\t -> const t <$> (liftIO $ print ( "before: " ++ show t))) ) >>=)
 {-
 lexer f = do
@@ -167,7 +170,6 @@ lexer f = do
         h S.:<| t -> put (s{buf=t}) >> f h
         S.Empty -> alexMonadScan >>= f
 -}
-
 
 data PPLine
     = IfLine PPIfLine
