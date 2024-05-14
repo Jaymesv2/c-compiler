@@ -27,146 +27,34 @@ import Effectful.Error.Static
 import Effectful.State.Static.Local
 }
 
-
 %action "AlexInput -> Int -> Eff es PPToken"
 %typeclass "(State AlexState :> es, Error String :> es)"
--- need to add 
 
-$digit = [0-9]    -- digits
+$digit = [0-9] 
 $nzdigit = [1-9]
 $octaldigit = [0-7]
-
 $nondigit = [_a-zA-Z]
-
 $hexdigit = [ $digit a-f A-F ]
-
-$unsignedsuffix = [uU]
-$longsuffix = [lL]
-@longlongsuffix = "ll" | "LL"
-$floatsuffix = [flFL]
-
-@integersuffix  = $unsignedsuffix $longsuffix? 
-                | $unsignedsuffix @longlongsuffix?
-                | $longsuffix $unsignedsuffix?
-                | @longlongsuffix $unsignedsuffix?
-
 $identnondigit = [ $digit $nondigit ]
-
-@hexquad = $hexdigit{4}
-@schar = $printable* 
-
-@universalCharacterNameInner = "u" @hexquad | "U" @hexquad @hexquad
-@universalCharacterName = "\\" @universalCharacterNameInner
-
-@hexprefix = "0x" | "0X"
-
-
---$sourceset
-
--- @constant = 
---     integerConst
---     floatingConst
---     enumerationConst
---     characterConst
-
-
--- constants 
---@integerConst = 
---  
---
---
---
--- TODO: add to lexer
---@octalconst = "0" | @octalconst $octaldigit
-
-
-
--- Char Constants
-
-
---@simpleescapesequence = '\\'  -- ( '\'' | '"' | '?' | '\\' | 'a' | 'b' | 'f' | 'n' | 'r' | 't' | 'v')
---@octalescapesequence = '\\' $octaldigit{1,3}
---@hexescapesequence = '\\x' $hexdigit+
-
-
-@escapesequence = '\\' ([\'\"\?\\abfnrtv] | $octaldigit{1,3} | 'x' $hexdigit+ | @universalCharacterNameInner)
-
-@cchar = [^\'\n\\] | @escapesequence
-
-@schar = [^\"\n\\] | @escapesequence
-
-
-$floatingsuffix = [lfLF]
-
-@sign = "+" | "-"
-
-@fractionalConstant = (($digit+)? "." $digit+) | ($digit+ ".")
-@exponentialPart = [eE] sign? $digit+
-
-@hexFractionalConstant = (($hexdigit+)? "." $hexdigit+) | ($hexdigit+ '.')
-@hexExponentialPart = [pP] sign? $hexdigit+
-
 $hchar = [^\n]
 $qchar = [^\n\"]
 
--- todo: 
---    escape sequences in strings and chars
---    float literals
---    hex literals
---    octal literals
--- <0> auto                      { basicAction TypeDef }
--- <0> break                     { basicAction Break }
--- <0> case                      { basicAction Case }
--- <0> const                     { basicAction Const }
--- <0> continue                  { basicAction Continue}
--- <0> default                   { basicAction Default }
--- <0> do                        { basicAction Do }
--- <0> else                      { basicAction Else }
--- <0> enum                      { basicAction Enum }
--- <0> extern                    { basicAction Extern }
--- <0> for                       { basicAction For }
--- <0> goto                      { basicAction Goto}
--- <0> if                        { basicAction If }
--- <0> inline                    { basicAction Inline }
--- <0> register                  { basicAction Register }
--- <0> restrict                  { basicAction Restrict }
--- <0> return                    { basicAction Return }
--- <0> static                    { basicAction TStatic }
--- <0> sizeof                    { basicAction Sizeof}
--- <0> struct                    { basicAction Struct}
--- <0> switch                    { basicAction Switch }
--- <0> typedef                   { basicAction TypeDef }
--- <0> union                     { basicAction Union }
--- <0> volatile                  { basicAction Volatile }
--- <0> while                     { basicAction While}
--- 
--- <0> void                      { basicAction Void }
--- <0> char                      { basicAction TChar}
--- <0> short                     { basicAction TShort}
--- <0> int                       { basicAction TInt}
--- <0> long                      { basicAction TLong}
--- <0> float                     { basicAction TFloat}
--- <0> double                    { basicAction TDouble}
--- <0> signed                    { basicAction TSigned}
--- <0> unsigned                  { basicAction TUnsigned}
--- <0> _Bool                     { basicAction TuBool}
--- <0> _Complex                  { basicAction TuComplex}
+@schar = $printable* 
 
+@hexquad = $hexdigit{4}
+@universalCharacterNameInner = "u" @hexquad | "U" @hexquad @hexquad
+@universalCharacterName = "\\" @universalCharacterNameInner
 
+@escapesequence = '\\' ([\'\"\?\\abfnrtv] | $octaldigit{1,3} | 'x' $hexdigit+ | @universalCharacterNameInner)
+@cchar = [^\'\n\\] | @escapesequence
+@schar = [^\"\n\\] | @escapesequence
 
-
-
-
-
-
-
-
-
+@sign = "+" | "-"
 
 tokens :-
 <0> "{"                       { punctuator LBrace }
 <0> "}"                       { punctuator RBrace }
--- hack to get the macro definition rules to work properly
+-- 
 <0> [$white]^"("              { punctuator LParen }
 <0> [^$white]^"("             { \_ _ -> pure $ PPSpecial PPSLParen }
 <0> ")"                       { punctuator RParen }
@@ -255,22 +143,6 @@ tokens :-
 <blockcomment> "*" [^\/]; -- match * not followed by /
 <blockcomment> "*/" { begin 0 } -- match */
 
-
-        -- check if an ident is a type or a normal ident
-        -- TODO: add a check for enum constants
--- <0>  $nondigit $identnondigit* { \(_,_,_,t) i -> get @SymbolTable <&> (\(symtbl:_) -> if isJust (M.lookup t symtbl) then TTypeName (T.take i t) else Ident (T.take i t)) }
--- <0>  $nzdigit $digit* @integersuffix?         {\(_,_,_,t) i -> pure . Constant $ IntConst (T.take i t ) Decimal Signed Standard }
--- <0>  "0" $octaldigit* @integersuffix?         {\(_,_,_,t) i -> pure . Constant $ IntConst (T.take i t) Octal Signed Standard }
--- <0>  @hexprefix $hexdigit* @integersuffix?    {\(_,_,_,t) i -> pure . Constant $ IntConst (T.take i t) Hex Signed Standard }
--- 
---         -- floating constants
--- <0>  @fractionalConstant @exponentialPart? $floatingsuffix? 
---             {\(_,_,_,t) i -> pure . Constant . FloatConst $ FracFloatingConstant (Nothing, Nothing) Nothing LongDouble}
--- <0>  $digit+ @exponentialPart $floatingsuffix? 
---             {\(_,_,_,t) i -> pure . Constant . FloatConst $ FracFloatingConstant (Nothing, Nothing) Nothing LongDouble}
--- <0>  @hexprefix @hexFractionalConstant @hexExponentialPart $floatingsuffix? 
---             {\(_,_,_,t) i -> pure . Constant . FloatConst $ FracFloatingConstant (Nothing, Nothing) Nothing LongDouble}
-    
 {
 
 basicAction :: (State AlexState :> es) => Token -> (AlexInput -> Int -> Eff es Token)
@@ -278,9 +150,6 @@ basicAction token _ _ = pure token
 
 punctuator :: (State AlexState :> es) => Punctuator -> (AlexInput -> Int -> Eff es PPToken)
 punctuator token _ _ = pure $ PPPunctuator token
-
---ppspecial :: (State AlexState :> es) => PPSpecial -> (AlexInput -> Int -> Eff es PPToken)
---ppspecial token _ _ = pure $ PPSpecial token
 
 alexInitUserState :: SymbolTable
 alexInitUserState = [M.empty]
