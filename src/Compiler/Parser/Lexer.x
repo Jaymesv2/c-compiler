@@ -166,6 +166,7 @@ $qchar = [^\n\"]
 tokens :-
 <0> "{"                       { punctuator LBrace }
 <0> "}"                       { punctuator RBrace }
+-- hack to get the macro definition rules to work properly
 <0> [$white]^"("              { punctuator LParen }
 <0> [^$white]^"("             { \_ _ -> pure $ PPSpecial PPSLParen }
 <0> ")"                       { punctuator RParen }
@@ -231,7 +232,7 @@ tokens :-
 -- <0>  \" [^\n\"] \"           { \(_,_,_,t) i -> pure $ error "e" }
 
         -- preprocessing numbers
-<0>  "."? $digit+ (identnondigit | [eEpP] sign | ".")? {\(_,_,_,t) i -> pure $ PPNumber (T.take i t)}
+<0>  "."? $digit ($digit | $identnondigit | [eEpP] @sign | ".")* {\(_,_,_,t) i -> pure $ PPNumber (T.take i t)}
 <0>  ($white # [\n])+;
 
 

@@ -49,7 +49,7 @@ data NumRep = Hex | Decimal | Octal
 
 data Constant
   = IntConst Integer NumRep Sign Size
-  | FloatConst (Int, Int) (Maybe (Sign, Int)) FloatSize
+  | FloatConst (Integer, Integer) (Maybe (Sign, Integer)) FloatSize
   | EnumConst Identifier
   | CharConst T.Text
   deriving stock (Eq, Show)
