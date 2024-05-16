@@ -10,3 +10,9 @@ result-*
 
 # direnv
 .direnv
+*.pdf
+*.c
+*.h
+platform.info
+.github
+tmp
