@@ -40,6 +40,7 @@ data Expr
     | DotE Expr Identifier
     | ArrowE Expr Identifier
     | UnaryE UnaryOp Expr
+    | InitE TypeName [(Maybe [Designator], Initializer)]
     | SizeofE Expr
     | SizeofTypeE TypeName
     | CastE TypeName Expr
@@ -127,7 +128,8 @@ data Pointer = Pointer [TypeQualifier] (Maybe Pointer)
 
 data ParameterDeclaration
     = ParameterDeclaration [DeclarationSpecifiers] Declarator
-    | AbsParameterDeclaration [DeclarationSpecifiers] AbstractDeclarator
+    | AbsParameterDeclaration [DeclarationSpecifiers] (Maybe AbstractDeclarator)
+    | VariadicDeclaration
     deriving stock (Eq, Show)
 
 data PrimitiveTypes
