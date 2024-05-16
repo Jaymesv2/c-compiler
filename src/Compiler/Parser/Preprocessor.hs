@@ -7,6 +7,7 @@ import Data.Maybe
 
 import Compiler.Parser
 import Compiler.Parser.Lexer
+import Compiler.Parser.ParseTree (Expr)
 import Compiler.Parser.TokenParsers
 import Compiler.Parser.Tokens
 
@@ -91,9 +92,15 @@ skipIfBlock skipToEnd = go 0
 
 handleIfLine :: (IOE :> es, State PreprocessorState :> es, Error String :> es, State AlexState :> es) => PPIfLine -> Eff es ()
 handleIfLine ifl = do
-    PreprocessorState{mode = m} <- get @PreprocessorState
+    m <- mode <$> get
     case ifl of
-        ILIf _toks -> error "#if is unimplemented"
+        ILIf toks -> do
+            mst <- macroSymTbl <$> get
+            case expandTokenLine mst toks of
+                Left _err -> throwError "Failed to expand tokens"
+                Right expanded -> do
+                    error "#if is unimplemented"
+        -- error "#if is unimplemented"
         ILIfDef ident ->
             -- if the branch isnt taken skip to the next #elif or
             maybeTakeBranch False . isJust . M.lookup ident . (\PreprocessorState{macroSymTbl = s} -> s) =<< get
@@ -103,8 +110,8 @@ handleIfLine ifl = do
             -- the previous branch was taken so skip to the end
             InBranchMode : _ -> skipIfBlock True $> ()
             -- previous branch was skipped, so check the conditional
-            SkipBranchMode : _t -> throwError "Taking #elif branches is unimplemented"
-            [] -> throwError "unexpected #elif"
+            SkipBranchMode : _t -> error "Taking #elif branches is unimplemented"
+            [] -> error "unexpected #elif"
         -- elif can set the state to EndBranchMode when it ends
         ILElse -> case m of
             -- the parser has been in a branch so skip the else
@@ -118,9 +125,9 @@ handleIfLine ifl = do
   where
     maybeTakeBranch shouldSkipToEnd b =
         if b
-            then modify (\s@PreprocessorState{mode = m} -> s{mode = InBranchMode : m})
+            then modify (\s -> s{mode = InBranchMode : mode s})
             else
-                modify (\s@PreprocessorState{mode = m} -> s{mode = SkipBranchMode : m})
+                modify (\s -> s{mode = SkipBranchMode : mode s})
                     >> skipIfBlock shouldSkipToEnd
                     >>= handleIfLine
                     >> pure ()
@@ -159,14 +166,14 @@ handleLine line = case line of
             Just _tbl -> throwError ("macro \"" ++ T.unpack name ++ "\" is already defined")
         pure []
     ControlLine (CLUndef name) -> do
-        modify (\s@PreprocessorState{macroSymTbl = mSymTbl} -> s{macroSymTbl = M.delete name mSymTbl})
+        modify (\s -> s{macroSymTbl = M.delete name (macroSymTbl s)})
         pure []
     ControlLine (CLLine _) -> do
-        throwError "Line control is unimplemented"
+        error "Line control is unimplemented"
     ControlLine (CLError _) -> do
-        throwError "Compile errors are is unimplemented"
+        error "Compile errors are is unimplemented"
     ControlLine (CLPragma _) -> do
-        throwError "Pragmas are is unimplemented"
+        error "Pragmas are is unimplemented"
     ControlLine CLEmpty -> do
         pure []
     ControlLine CLParseError -> do
@@ -176,19 +183,28 @@ handleLine line = case line of
         liftIO . print $ "Encountered invalid directive \"" ++ T.unpack name ++ "\", ignoring"
         pure []
     PPSEnd -> do
-        s@PreprocessorState{lexStack = ls} <- get
-        case ls of
+        s <- get
+        case lexStack s of
             [] -> pure [PPEOF]
             h : t -> do
                 put h
                 put (s{lexStack = t})
                 pure []
 
+mergeStringLiterals :: [PPToken] -> [PPToken]
+mergeStringLiterals (PPStringLiteral s1 : PPStringLiteral s2 : t) = PPStringLiteral (T.append s1 s2) : mergeStringLiterals t
+mergeStringLiterals (h : t) = h : mergeStringLiterals t
+mergeStringLiterals [] = []
+
+{-
+expand each argument, then paste each into the stream and expand again
+-}
+
 expandTokenLine :: M.Map T.Text MacroDef -> [PPToken] -> Either () [PPToken {- :: (State AlexState :> es, Error String :> es, State PreprocessorState :> es) => Eff es () -}]
-expandTokenLine macros = go []
+expandTokenLine macros = fmap mergeStringLiterals . go []
   where
     go acc [] = Right (reverse acc)
-    go acc ((PPStringLiteral s1) : (PPStringLiteral s2) : t) = go (PPStringLiteral (T.append s1 s2) : acc) t
+    -- go acc ((PPStringLiteral s1) : (PPStringLiteral s2) : t) = go (PPStringLiteral (T.append s1 s2) : acc) t
     go acc ((PPIdent ident) : t) = case M.lookup ident macros of
         Nothing -> go (PPIdent ident : acc) t
         Just (ObjectMacro replacementList) -> go (replacementList ++ acc) t
@@ -251,7 +267,7 @@ ppNextToken = do
             _ -> do
                 tokenLine <- getAndParseLine >>= handleLine
                 case expandTokenLine mst tokenLine of
-                    Left () -> throwError "failed to expande tokens"
+                    Left () -> throwError "failed to expand tokens"
                     Right expanded -> do
                         modify (\s' -> s'{outQueue = expanded})
                         ppNextToken
@@ -265,64 +281,79 @@ runPreprocessor = evalState newPreprocessorState . evalState [M.empty]
 preprocess :: (IOE :> es, Error String :> es, State AlexState :> es, State PreprocessorState :> es, State SymbolTable :> es) => Eff es Token
 preprocess = do
     nextToken <- ppNextToken
-    case nextToken of
-        PPHeaderName _x -> error ""
-        PPOther _o -> error ""
-        PPNumber n -> do
-            -- liftIO . print $ "num const" ++ show n
-            liftIO . print $ n
+    symTbl <-
+        get <&> \case
+            (h : _) -> h
+            [] -> error "empty sym tbl"
+
+    case ppTokenToToken (convertIdent symTbl) nextToken of
+        Left () -> throwError "something"
+        Right Nothing -> preprocess
+        Right (Just t) -> pure t
+
+convertIdent :: M.Map Identifier () -> Identifier -> Token
+convertIdent symtbl ident = case ident of
+    "auto" -> Keyword TypeDef
+    "break" -> Keyword Break
+    "case" -> Keyword Case
+    "const" -> Keyword Const
+    "continue" -> Keyword Continue
+    "default" -> Keyword Default
+    "do" -> Keyword Do
+    "else" -> Keyword Else
+    "enum" -> Keyword Enum
+    "extern" -> Keyword Extern
+    "for" -> Keyword For
+    "goto" -> Keyword Goto
+    "if" -> Keyword If
+    "inline" -> Keyword Inline
+    "register" -> Keyword Register
+    "restrict" -> Keyword Restrict
+    "return" -> Keyword Return
+    "static" -> Keyword TStatic
+    "sizeof" -> Keyword Sizeof
+    "struct" -> Keyword Struct
+    "switch" -> Keyword Switch
+    "typedef" -> Keyword TypeDef
+    "union" -> Keyword Union
+    "volatile" -> Keyword Volatile
+    "while" -> Keyword While
+    "void" -> Keyword Void
+    "char" -> Keyword TChar
+    "short" -> Keyword TShort
+    "int" -> Keyword TInt
+    "long" -> Keyword TLong
+    "float" -> Keyword TFloat
+    "double" -> Keyword TDouble
+    "signed" -> Keyword TSigned
+    "unsigned" -> Keyword TUnsigned
+    "_Bool" -> Keyword TuBool
+    "_Complex" -> Keyword TuComplex
+    i -> case M.lookup i symtbl of
+        Just _ -> TTypeName i
+        Nothing -> Ident i
+
+ppTokenToToken :: (Identifier -> Token) -> PPToken -> Either () (Maybe Token)
+ppTokenToToken f tok =
+    case tok of
+        PPHeaderName _x -> Left ()
+        PPOther _o -> Left ()
+        PPNumber n ->
             case parseNumConstant n of
-                Left _err -> throwError "failed to parse num constant"
-                Right c -> pure $ Constant c
-        PPCharConst c -> pure $ Constant $ CharConst c
-        PPStringLiteral s -> pure $ StringLiteral s
-        PPPunctuator punct -> pure $ Punctuator punct
-        PPIdent ident -> case ident of
-            "auto" -> pure $ Keyword TypeDef
-            "break" -> pure $ Keyword Break
-            "case" -> pure $ Keyword Case
-            "const" -> pure $ Keyword Const
-            "continue" -> pure $ Keyword Continue
-            "default" -> pure $ Keyword Default
-            "do" -> pure $ Keyword Do
-            "else" -> pure $ Keyword Else
-            "enum" -> pure $ Keyword Enum
-            "extern" -> pure $ Keyword Extern
-            "for" -> pure $ Keyword For
-            "goto" -> pure $ Keyword Goto
-            "if" -> pure $ Keyword If
-            "inline" -> pure $ Keyword Inline
-            "register" -> pure $ Keyword Register
-            "restrict" -> pure $ Keyword Restrict
-            "return" -> pure $ Keyword Return
-            "static" -> pure $ Keyword TStatic
-            "sizeof" -> pure $ Keyword Sizeof
-            "struct" -> pure $ Keyword Struct
-            "switch" -> pure $ Keyword Switch
-            "typedef" -> pure $ Keyword TypeDef
-            "union" -> pure $ Keyword Union
-            "volatile" -> pure $ Keyword Volatile
-            "while" -> pure $ Keyword While
-            "void" -> pure $ Keyword Void
-            "char" -> pure $ Keyword TChar
-            "short" -> pure $ Keyword TShort
-            "int" -> pure $ Keyword TInt
-            "long" -> pure $ Keyword TLong
-            "float" -> pure $ Keyword TFloat
-            "double" -> pure $ Keyword TDouble
-            "signed" -> pure $ Keyword TSigned
-            "unsigned" -> pure $ Keyword TUnsigned
-            "_Bool" -> pure $ Keyword TuBool
-            "_Complex" -> pure $ Keyword TuComplex
-            i ->
-                M.lookup i . head <$> get @SymbolTable
-                    >>= \case
-                        Just _ -> pure $ error "cant do things"
-                        Nothing -> pure $ Ident i
+                Left _err -> Left () -- throwError "failed to parse num constant"
+                Right c -> Right . Just $ Constant c
+        PPCharConst c -> Right . Just $ Constant $ CharConst c
+        PPStringLiteral s -> Right . Just $ StringLiteral s
+        PPPunctuator punct -> Right . Just $ Punctuator punct
+        PPIdent ident -> Right . Just $ f ident
+        {-M.lookup i . head <$> get @SymbolTable
+            >>= \case
+                Just _ -> pure $ error "cant do things"
+                Nothing -> pure $ Ident i-}
         -- PPNewline -> preprocess
-        PPSpecial PPNewline -> preprocess
-        PPSpecial PPSLParen -> pure $ Punctuator LParen
-        PPEOF -> pure EOF
+        PPSpecial PPNewline -> Right Nothing
+        PPSpecial PPSLParen -> Right . Just $ Punctuator LParen
+        PPEOF -> Right . Just $ EOF
 
 printPPTokens :: (IOE :> es, State AlexState :> es, Error String :> es, State PreprocessorState :> es, State SymbolTable :> es) => Eff es ()
 printPPTokens = do

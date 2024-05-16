@@ -15,7 +15,7 @@ import Compiler.Parser
 import Compiler.Parser.Lexer
 import Compiler.Parser.Tokens
 import Compiler.Parser.ParseTree (Expr (..), UnaryOp (..), BinOp (..), AssignmentOp (..))
-
+import Compiler.Parser.TokenParsers
 
 import Effectful
 import Effectful.Error.Static
@@ -24,7 +24,6 @@ import Effectful.State.Static.Local
 }
 
 %name parseLine Line
---%partial expr Expr
 
 --%monad {(Error String :> es, State AlexState :> es, State SymbolTable :> es) }  {Eff es} {>>=} {return}
 %monad {(Error String :> es) }  {Eff es} {>>=} {return}

@@ -119,8 +119,8 @@ import Effectful.State.Static.Local
     '&='    { Punctuator AndAssign}
     '^='    { Punctuator XorAssign}
     '|='    { Punctuator OrAssign}
-    '#'     { Punctuator Stringize }
-    '##'    { Punctuator TokenPaste}
+    -- '#'     { Punctuator Stringize }
+    -- '##'    { Punctuator TokenPaste}
 
 
 -- %name declaration Declaration
