@@ -1,3 +1,4 @@
+{-# LANGUAGE ScopedTypeVariables #-}
 module Main where
 
 import Compiler.Parser.Grammar
@@ -20,8 +21,13 @@ main = do
     -- let source = "int func(int i) { int i; }"
     -- _ <- runEff $ runAlex source printTokens
     -- _ <- runEff $ runAlex source $ runPreprocessor printPPTokens
-  runEff (runAlex source $ runPreprocessor clike) >>= print
+  res <- runEff (runAlex source $ runPreprocessor clike) 
+  print res
+  {-case res of 
+      Left (_, err) -> error $ "failed to parse with error: " ++ err
+      Right tree -> print $ head tree-}
 
   pure ()
+
 
 -- For withUtf8, see https://serokell.io/blog/haskell-with-utf8

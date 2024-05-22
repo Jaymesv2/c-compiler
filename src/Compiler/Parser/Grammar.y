@@ -7,7 +7,7 @@ import Compiler.Parser.Preprocessor (preprocess, PreprocessorState)
 
 import Compiler.Parser.ParseTree
 import Compiler.Parser.Tokens
-import Compiler.Parser (SymbolTable)
+import Compiler.SymbolTable (SymbolTable)
 
 --data ParseError = ParseError
 
@@ -319,13 +319,14 @@ DeclarationSpecifier :: { DeclarationSpecifiers }
     | TypeQualifier                                 { DSTypeQual $1    }
     | FunctionSpecifier                             { DSFuncSpec $1    }
 
+    --(Declarator, Maybe Initializer)] }
 InitDeclarationList :: { [InitDeclaration] }
     : InitDeclarator                            { [ $1 ] } 
     | InitDeclarationList ',' InitDeclarator    { $3 : $1 }
 
 InitDeclarator :: { InitDeclaration }
-    : Declarator                    { UninitDeclaration $1 }
-    | Declarator '=' Initializer    { InitDeclaration $1 $3 }
+    : Declarator                    { InitDeclaration $1 Nothing }
+    | Declarator '=' Initializer    { InitDeclaration $1 (Just $3) }
 
 
 -- page 98

@@ -1,7 +1,6 @@
-module Compiler.Parser (SymbolTable) where
+module Compiler.Parser (Identifier) where
 
 -- import qualified Data.List as L
-import Data.Map qualified as M
 import Data.Text qualified as T
 
-type SymbolTable = [M.Map T.Text ()]
+type Identifier = T.Text

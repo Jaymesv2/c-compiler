@@ -51,9 +51,12 @@ data Expr
     | CommaE Expr Expr
     deriving stock (Eq, Show)
 
+-- must have at least one type specifier,
 -- page 97
 data Declaration = Declaration [DeclarationSpecifiers] (Maybe [InitDeclaration])
     deriving stock (Eq, Show)
+
+-- Maybe [(Declarator, Maybe Initializer)])
 
 -- new type
 {-
@@ -72,20 +75,7 @@ data DeclarationSpecifiers
     | DSFuncSpec FunctionSpecifier
     deriving stock (Eq, Show)
 
-{-
-data DeclarationSpecifiers
-    = DSStorageSpec StorageClassSpecifier DeclarationSpecifiers
-    | DSTypeSpec TypeSpecifier DeclarationSpecifiers
-    | DSTypeQual TypeQualifier DeclarationSpecifiers
-    | DSFuncSpec FunctionSpecifier DeclarationSpecifiers
-    | DSNil
-    deriving stock (Eq, Show)
--}
-
-data InitDeclaration
-    = UninitDeclaration Declarator
-    | InitDeclaration Declarator Initializer
-    deriving stock (Eq, Show)
+data InitDeclaration = InitDeclaration Declarator (Maybe Initializer) deriving stock (Eq, Show)
 
 -- page 114
 data Declarator = Declarator (Maybe Pointer) DirectDeclarator
@@ -101,6 +91,7 @@ data DirectDeclarator
     | DDPlaceholder
     deriving stock (Eq, Show)
 
+-- needs to be updated
 -- page 101
 data DataLayoutSpec = DataLayoutSpec StructOrUnion (Maybe Identifier) (Maybe [StructDeclaration])
     deriving stock (Eq, Show)
@@ -115,7 +106,7 @@ type SpecifierQualifierList = [SpecifierQualifier]
 
 type SpecifierQualifier = Either TypeSpecifier TypeQualifier
 
-data StructDeclarator = StructDeclarator Declarator (Maybe Expr)
+data StructDeclarator = StructDeclarator Declarator (Maybe Expr) -- the element and the size
     deriving stock (Eq, Show)
 
 data EnumSpecifier

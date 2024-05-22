@@ -2,6 +2,8 @@
 -- {-# LANGUAGE NoMonomorphismRestriction #-}
 module Compiler.Parser.Lexer (alexMonadScan, runAlex, AlexState, newAlexState, printTokens) where
 
+import Compiler.Parser
+import Compiler.SymbolTable
 --import Control.Applicative as App (Applicative (..))
 --import Data.Maybe
 import Data.Functor
@@ -150,9 +152,6 @@ basicAction token _ _ = pure token
 
 punctuator :: (State AlexState :> es) => Punctuator -> (AlexInput -> Int -> Eff es PPToken)
 punctuator token _ _ = pure $ PPPunctuator token
-
-alexInitUserState :: SymbolTable
-alexInitUserState = [M.empty]
 
 alexEOF :: Eff es PPToken
 alexEOF = pure PPEOF

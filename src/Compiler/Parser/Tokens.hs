@@ -1,8 +1,8 @@
 module Compiler.Parser.Tokens (Identifier, PPToken (..), PPSpecial (..), Punctuator (..), Keyword (..), Token (..), Size (..), FloatSize (..), NumRep (..), Sign (..), Constant (..)) where
 
-import Data.Text qualified as T
+import Compiler.Parser
 
-type Identifier = T.Text
+import Data.Text qualified as T
 
 data PPToken
   = PPHeaderName T.Text

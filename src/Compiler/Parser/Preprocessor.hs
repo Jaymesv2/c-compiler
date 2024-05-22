@@ -10,6 +10,8 @@ import Compiler.Parser.Lexer
 import Compiler.Parser.ParseTree (Expr)
 import Compiler.Parser.TokenParsers
 import Compiler.Parser.Tokens
+import Compiler.SymbolTable (SymbolTable)
+import Compiler.SymbolTable qualified as SymTbl
 
 import Effectful
 import Effectful.Error.Static
@@ -197,21 +199,39 @@ mergeStringLiterals (h : t) = h : mergeStringLiterals t
 mergeStringLiterals [] = []
 
 {-
-expand each argument, then paste each into the stream and expand again
+takeWhileState :: ((b, a) -> (b, Bool)) -> b -> [a] -> [a]
+takeWhileState _ _ [] = []
+takeWhileState f st (h : t) = case f (st, h) of
+    (newSt, True) -> h : takeWhileState f newSt t
+    (_, False) -> []
+
+stateUpdater :: (Int, PPToken) -> (Int, Bool)
+stateUpdater inp = case inp of
+    -- base cases
+    (0, PPPunctuator RParen) -> (0, False) -- reached end of function call
+    (0, PPPunctuator Comma) -> (0, False) -- reached comma, stop
+    -- handle nesting
+    (n, PPPunctuator LParen) -> (n + 1, True) -- increase nesting
+    (n, PPPunctuator RParen) -> (n - 1, True) -- decrease nesting
+    (n, _) -> (n, True)
 -}
 
+{-
+expand each argument, then paste each into the stream and expand again
+-}
 expandTokenLine :: M.Map T.Text MacroDef -> [PPToken] -> Either () [PPToken {- :: (State AlexState :> es, Error String :> es, State PreprocessorState :> es) => Eff es () -}]
 expandTokenLine macros = fmap mergeStringLiterals . go []
   where
     go acc [] = Right (reverse acc)
-    -- go acc ((PPStringLiteral s1) : (PPStringLiteral s2) : t) = go (PPStringLiteral (T.append s1 s2) : acc) t
     go acc ((PPIdent ident) : t) = case M.lookup ident macros of
         Nothing -> go (PPIdent ident : acc) t
         Just (ObjectMacro replacementList) -> go (replacementList ++ acc) t
         Just (FuncMacro args variadic replacementList) -> expandFuncMacro args variadic replacementList t >>= \(list, remToks) -> go (list ++ acc) remToks
     go acc (h : t) = go (h : acc) t
 
-    -- returns (if it there is another param, the argument, the tokens)
+    -- tail recursive function which returns tokens until a comma is found.
+    -- commas within nested function calls are ignored
+
     getArg' :: Int -> [PPToken] -> Bool -> [PPToken] -> Either [PPToken] (Bool, [PPToken], [PPToken])
     getArg' 0 acc False (PPPunctuator Comma : t) = Right (True, reverse acc, t)
     getArg' 0 acc _ (PPPunctuator RParen : t) = Right (False, reverse acc, t)
@@ -273,7 +293,7 @@ ppNextToken = do
                         ppNextToken
 
 runPreprocessor :: (State AlexState :> es, Error String :> es) => Eff (State SymbolTable ': State PreprocessorState ': es) a -> Eff es a
-runPreprocessor = evalState newPreprocessorState . evalState [M.empty]
+runPreprocessor = evalState newPreprocessorState . evalState SymTbl.empty
 
 -- runPreprocessor' :: T.Text -> Eff (State SymbolTable ': State PreprocessorState ': es) a -> Eff es a
 -- runPreprocessor' inp = runAlex inp . evalState newPreprocessorState . evalState [M.empty]
@@ -281,17 +301,14 @@ runPreprocessor = evalState newPreprocessorState . evalState [M.empty]
 preprocess :: (IOE :> es, Error String :> es, State AlexState :> es, State PreprocessorState :> es, State SymbolTable :> es) => Eff es Token
 preprocess = do
     nextToken <- ppNextToken
-    symTbl <-
-        get <&> \case
-            (h : _) -> h
-            [] -> error "empty sym tbl"
+    symTbl <- get
 
     case ppTokenToToken (convertIdent symTbl) nextToken of
         Left () -> throwError "something"
         Right Nothing -> preprocess
         Right (Just t) -> pure t
 
-convertIdent :: M.Map Identifier () -> Identifier -> Token
+convertIdent :: SymbolTable -> Identifier -> Token
 convertIdent symtbl ident = case ident of
     "auto" -> Keyword TypeDef
     "break" -> Keyword Break
@@ -329,9 +346,10 @@ convertIdent symtbl ident = case ident of
     "unsigned" -> Keyword TUnsigned
     "_Bool" -> Keyword TuBool
     "_Complex" -> Keyword TuComplex
-    i -> case M.lookup i symtbl of
-        Just _ -> TTypeName i
-        Nothing -> Ident i
+    i ->
+        if SymTbl.isType i symtbl
+            then TTypeName i
+            else Ident i
 
 ppTokenToToken :: (Identifier -> Token) -> PPToken -> Either () (Maybe Token)
 ppTokenToToken f tok =
@@ -346,11 +364,6 @@ ppTokenToToken f tok =
         PPStringLiteral s -> Right . Just $ StringLiteral s
         PPPunctuator punct -> Right . Just $ Punctuator punct
         PPIdent ident -> Right . Just $ f ident
-        {-M.lookup i . head <$> get @SymbolTable
-            >>= \case
-                Just _ -> pure $ error "cant do things"
-                Nothing -> pure $ Ident i-}
-        -- PPNewline -> preprocess
         PPSpecial PPNewline -> Right Nothing
         PPSpecial PPSLParen -> Right . Just $ Punctuator LParen
         PPEOF -> Right . Just $ EOF
