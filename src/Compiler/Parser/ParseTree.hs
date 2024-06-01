@@ -1,6 +1,7 @@
 module Compiler.Parser.ParseTree where
 
 import Compiler.Parser.Tokens
+import Compiler.Types
 import Data.Text qualified as T
 
 -- page
@@ -53,19 +54,12 @@ data Expr
 
 -- must have at least one type specifier,
 -- page 97
+
 data Declaration = Declaration [DeclarationSpecifiers] (Maybe [InitDeclaration])
     deriving stock (Eq, Show)
 
--- Maybe [(Declarator, Maybe Initializer)])
-
--- new type
-{-
-data DeclSpecifiers
-    = DeclSpecifiers
-        (Maybe StorageClassSpecifier)
-        [TypeSpecifier]
-        [TypeQualifier]
--}
+-- data Declaration = Declaration (Maybe StorageClassSpecifier) Identifier
+--     deriving stock (Eq, Show)
 
 -- This can probably be changed to an enum that just combines each of the specifiers and qualifiers and a nonempty list can be used in the above declaration
 data DeclarationSpecifiers
@@ -78,6 +72,7 @@ data DeclarationSpecifiers
 data InitDeclaration = InitDeclaration Declarator (Maybe Initializer) deriving stock (Eq, Show)
 
 -- page 114
+-- page 114
 data Declarator = Declarator (Maybe Pointer) DirectDeclarator
     deriving stock (Eq, Show)
 
@@ -88,12 +83,18 @@ data DirectDeclarator
       DDArr DirectDeclarator Bool [TypeQualifier] (Maybe Expr) Bool
     | DDFuncPList DirectDeclarator [ParameterDeclaration]
     | DDFuncIList DirectDeclarator [Identifier]
-    | DDPlaceholder
     deriving stock (Eq, Show)
 
 -- needs to be updated
 -- page 101
-data DataLayoutSpec = DataLayoutSpec StructOrUnion (Maybe Identifier) (Maybe [StructDeclaration])
+-- data DataLayoutSpec = DataLayoutSpec StructOrUnion (Maybe Identifier) (Maybe [StructDeclaration])
+--     deriving stock (Eq, Show)
+
+data DataLayoutSpec
+    = StructDef (Maybe Identifier) [StructDeclaration]
+    | StructRef Identifier
+    | UnionDef (Maybe Identifier) [StructDeclaration]
+    | UnionRef Identifier
     deriving stock (Eq, Show)
 
 data StructOrUnion = SUStruct | SUUnion
@@ -111,7 +112,7 @@ data StructDeclarator = StructDeclarator Declarator (Maybe Expr) -- the element 
 
 data EnumSpecifier
     = EnumSpecifier (Maybe Identifier) [(Identifier, Maybe Expr)]
-    | EnumForwardRef Identifier
+    | EnumRef Identifier
     deriving stock (Eq, Show)
 
 data Pointer = Pointer [TypeQualifier] (Maybe Pointer)
@@ -206,7 +207,8 @@ data Statement
     | ReturnStmt (Maybe Expr)
     deriving stock (Eq, Show)
 
-type CompoundStatement = [BlockItem]
+newtype CompoundStatement = CompoundStatement [BlockItem]
+    deriving stock (Eq, Show)
 
 data BlockItem
     = BDecl Declaration

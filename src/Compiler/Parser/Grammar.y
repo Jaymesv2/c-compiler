@@ -368,9 +368,29 @@ FunctionSpecifier :: { FunctionSpecifier }
 -- page 101
 -- might merge these two rules into 1 with 6 rules
 StructOrUnionSpecifier :: {DataLayoutSpec}
+    : StructOrUnion ident '{' StructDeclarationList '}' 
+        { case $1 of 
+            SUStruct -> StructDef (Just $2) $4
+            SUUnion -> UnionDef (Just $2) $4 }
+    | StructOrUnion  '{' StructDeclarationList '}'      
+        { case $1 of 
+            SUStruct -> StructDef Nothing $3
+            SUUnion -> UnionDef Nothing $3 }
+    | StructOrUnion ident                               
+        { case $1 of
+            SUStruct -> StructRef $2
+            SUUnion -> UnionRef $2 }
+
+
+        --DataLayoutSpec $1 (Just $2) (Just ((reverse $4) :: [StructDeclaration]))
+        --DataLayoutSpec $1 Nothing (Just (reverse $3)) :: DataLayoutSpec }
+        -- DataLayoutSpec $1 (Just $2) Nothing :: DataLayoutSpec }
+
+
+{-StructOrUnionSpecifier :: {DataLayoutSpec}
     : StructOrUnion ident '{' StructDeclarationList '}' { DataLayoutSpec $1 (Just $2) (Just ((reverse $4) :: [StructDeclaration])) :: DataLayoutSpec}
     | StructOrUnion  '{' StructDeclarationList '}'      { DataLayoutSpec $1 Nothing (Just (reverse $3)) :: DataLayoutSpec }
-    | StructOrUnion ident                               { DataLayoutSpec $1 (Just $2) Nothing :: DataLayoutSpec }
+    | StructOrUnion ident                               { DataLayoutSpec $1 (Just $2) Nothing :: DataLayoutSpec }-}
 
 StructOrUnion :: { StructOrUnion }
     : struct    { SUStruct :: StructOrUnion }
@@ -411,7 +431,7 @@ EnumSpecifier :: { EnumSpecifier }
     | enum  '{' EnumeratorList '}'          { EnumSpecifier Nothing   (reverse $3)  :: EnumSpecifier }
     | enum ident '{' EnumeratorList ',' '}' { EnumSpecifier (Just $2) (reverse $4)  :: EnumSpecifier }
     | enum '{' EnumeratorList ',' '}'       { EnumSpecifier Nothing   (reverse $3)  :: EnumSpecifier }
-    | enum ident                            { EnumForwardRef $2                     :: EnumSpecifier }
+    | enum ident                            { EnumRef $2                     :: EnumSpecifier }
 
                                     -- this needs to be a "constant" expression
 -- little hack for the list building
@@ -430,7 +450,7 @@ EnumerationConstant :: { Identifier }
     : ident { $1 :: Identifier }
 
 -- Page 114
-Declarator :: {Declarator}
+Declarator :: { Declarator }
     : Pointer DirectDeclarator      { Declarator (Just $1) $2 :: Declarator }
     | DirectDeclarator              { Declarator Nothing $1   :: Declarator }
 
@@ -481,18 +501,17 @@ IdentifierList :: { [Identifier] }
     : ident                     { [ $1 ]     :: [Identifier]}
     | IdentifierList ',' ident { $3 : $1    :: [Identifier]}
 
-
 -- page 122
 TypeName :: {TypeName }
     : SpecifierQualifierList AbstractDeclarator { TypeName (reverse $1) (Just $2) :: TypeName }
     | SpecifierQualifierList                    { TypeName (reverse $1) Nothing   :: TypeName }
 
-AbstractDeclarator  :: {AbstractDeclarator}
+AbstractDeclarator  :: { AbstractDeclarator }
     : Pointer                           { ADPtr $1          :: AbstractDeclarator }
     | Pointer DirectAbstractDeclarator  { ADPtrDirect $1 $2 :: AbstractDeclarator }
     | DirectAbstractDeclarator          { ADDirect $1       :: AbstractDeclarator }
 
-DirectAbstractDeclarator :: {DirectAbstractDeclarator}
+DirectAbstractDeclarator :: { DirectAbstractDeclarator }
     : '(' AbstractDeclarator ')'                        { DADeclarator $2           :: DirectAbstractDeclarator }
     | DirectAbstractDeclarator '['  AssignmentExpr ']'  { Array (Just $1) (Just $3) :: DirectAbstractDeclarator }
     | DirectAbstractDeclarator '['  ']'                 { Array (Just $1) Nothing   :: DirectAbstractDeclarator }
@@ -608,8 +627,8 @@ Statement :: { Statement }
         --ExpressionStatement   { (ExpressionStmt $1) :: Statement }
 
 
-CompoundStatement :: { [BlockItem] }
-    : '{' BlockItemList '}' { (reverse $2) :: [BlockItem] }
+CompoundStatement :: { CompoundStatement }
+    : '{' BlockItemList '}' { CompoundStatement (reverse $2) :: CompoundStatement }
 
 BlockItemList :: { [BlockItem] }
     : BlockItemList Declaration {  (BDecl $2 : $1) :: [BlockItem] }
@@ -680,9 +699,15 @@ catchE m k =
 --parseError :: Error String :> es => (Token, [String]) -> Eff es a
 parseError :: (Error String :> es, State AlexState :> es, State SymbolTable :> es) => (Token, [String]) -> Eff es a
 parseError (t, tokens) = error $ "something failed :(, failed on token: \"" ++  show t ++ "\"possible tokens: " ++ show tokens  -- throwError "failure :("
+{-
+data PCtx = PCtx
 
+data ParserContext :: Effect
 
+type instance DispatchOf ParserContext = Static NoSideEffects
 
+newtype instance StaticRep ParserContext = ParserContext PCtx
+-}
 
 
 {-
