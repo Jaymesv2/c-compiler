@@ -32,57 +32,53 @@ data BinOp
 data AssignmentOp = ATimesAssign | ADivAssign | AModAssign | APlusAssign | AMinusAssign | ALShiftAssign | ARShiftAssign | AAndAssign | AXorAssign | AOrAssign
     deriving stock (Eq, Show)
 
-data Expr
-    = EIdent Identifier
+data Expr i
+    = EIdent i
     | EConstant Constant
     | EStringLiteral T.Text
-    | Bracketed Expr Expr
-    | Called Expr [Expr]
-    | DotE Expr Identifier
-    | ArrowE Expr Identifier
-    | UnaryE UnaryOp Expr
-    | InitE TypeName [(Maybe [Designator], Initializer)]
-    | SizeofE Expr
-    | SizeofTypeE TypeName
-    | CastE TypeName Expr
-    | BinaryOp Expr BinOp Expr
-    | ConditionalExpr Expr Expr Expr
-    | SimpleAssignE Expr Expr
-    | CompoundAssignE Expr AssignmentOp Expr
-    | CommaE Expr Expr
+    | Bracketed (Expr i) (Expr i)
+    | Called (Expr i) [Expr i]
+    | DotE (Expr i) Identifier
+    | ArrowE (Expr i) Identifier
+    | UnaryE UnaryOp (Expr i)
+    | InitE (TypeName i) [(Maybe [Designator i], Initializer i)]
+    | SizeofE (Expr i)
+    | SizeofTypeE (TypeName i)
+    | CastE (TypeName i) (Expr i)
+    | BinaryOp (Expr i) BinOp (Expr i)
+    | ConditionalExpr (Expr i) (Expr i) (Expr i)
+    | SimpleAssignE (Expr i) (Expr i)
+    | CompoundAssignE (Expr i) AssignmentOp (Expr i)
+    | CommaE (Expr i) (Expr i)
     deriving stock (Eq, Show)
 
 -- must have at least one type specifier,
 -- page 97
 
-data Declaration = Declaration [DeclarationSpecifiers] (Maybe [InitDeclaration])
+data Declaration i = Declaration [DeclarationSpecifiers i] (Maybe [InitDeclaration i])
     deriving stock (Eq, Show)
 
 -- data Declaration = Declaration (Maybe StorageClassSpecifier) Identifier
 --     deriving stock (Eq, Show)
 
 -- This can probably be changed to an enum that just combines each of the specifiers and qualifiers and a nonempty list can be used in the above declaration
-data DeclarationSpecifiers
+data DeclarationSpecifiers i
     = DSStorageSpec StorageClassSpecifier
-    | DSTypeSpec TypeSpecifier
+    | DSTypeSpec (TypeSpecifier i)
     | DSTypeQual TypeQualifier
     | DSFuncSpec FunctionSpecifier
     deriving stock (Eq, Show)
 
-data InitDeclaration = InitDeclaration Declarator (Maybe Initializer) deriving stock (Eq, Show)
+data InitDeclaration   i = InitDeclaration (Declarator   i) (Maybe (Initializer   i)) deriving stock (Eq, Show)
 
 -- page 114
--- page 114
-data Declarator = Declarator (Maybe Pointer) DirectDeclarator
-    deriving stock (Eq, Show)
 
-data DirectDeclarator
-    = DDIdent Identifier
-    | DDRec Declarator
-    | -- static expr pointer
-      DDArr DirectDeclarator Bool [TypeQualifier] (Maybe Expr) Bool
-    | DDFuncPList DirectDeclarator [ParameterDeclaration]
-    | DDFuncIList DirectDeclarator [Identifier]
+data Declarator i
+    = DDIdent i
+    | DDPointer [TypeQualifier] (Declarator i)
+    | DDArr (Declarator i) Bool [TypeQualifier] (Maybe (Expr i)) Bool
+    | DDFuncPList (Declarator i) [ParameterDeclaration i]
+    | DDFuncIList (Declarator i) [i]
     deriving stock (Eq, Show)
 
 -- needs to be updated
@@ -90,37 +86,37 @@ data DirectDeclarator
 -- data DataLayoutSpec = DataLayoutSpec StructOrUnion (Maybe Identifier) (Maybe [StructDeclaration])
 --     deriving stock (Eq, Show)
 
-data DataLayoutSpec
-    = StructDef (Maybe Identifier) [StructDeclaration]
+data DataLayoutSpec i
+    = StructDef (Maybe Identifier) [StructDeclaration i]
     | StructRef Identifier
-    | UnionDef (Maybe Identifier) [StructDeclaration]
+    | UnionDef (Maybe Identifier) [StructDeclaration i]
     | UnionRef Identifier
     deriving stock (Eq, Show)
 
 data StructOrUnion = SUStruct | SUUnion
     deriving stock (Eq, Show)
 
-data StructDeclaration = StructDeclaration [SpecifierQualifier] [StructDeclarator]
+data StructDeclaration i = StructDeclaration [SpecifierQualifier i] [StructDeclarator i]
     deriving stock (Eq, Show)
 
-type SpecifierQualifierList = [SpecifierQualifier]
+type SpecifierQualifierList t i = [SpecifierQualifier i]
 
-type SpecifierQualifier = Either TypeSpecifier TypeQualifier
+type SpecifierQualifier i = Either (TypeSpecifier i) TypeQualifier
 
-data StructDeclarator = StructDeclarator Declarator (Maybe Expr) -- the element and the size
+data StructDeclarator i = StructDeclarator (Declarator i) (Maybe (Expr i)) -- the element and the size
     deriving stock (Eq, Show)
 
-data EnumSpecifier
-    = EnumSpecifier (Maybe Identifier) [(Identifier, Maybe Expr)]
+data EnumSpecifier i
+    = EnumSpecifier (Maybe i) [(i, Maybe (Expr i))]
     | EnumRef Identifier
     deriving stock (Eq, Show)
 
 data Pointer = Pointer [TypeQualifier] (Maybe Pointer)
     deriving stock (Eq, Show)
 
-data ParameterDeclaration
-    = ParameterDeclaration [DeclarationSpecifiers] Declarator
-    | AbsParameterDeclaration [DeclarationSpecifiers] (Maybe AbstractDeclarator)
+data ParameterDeclaration i
+    = ParameterDeclaration [DeclarationSpecifiers i] (Declarator i)
+    | AbsParameterDeclaration [DeclarationSpecifiers i] (Maybe (AbstractDeclarator i))
     | VariadicDeclaration
     deriving stock (Eq, Show)
 
@@ -140,10 +136,10 @@ data PrimitiveTypes
     deriving stock (Eq, Show)
 
 -- page 99
-data TypeSpecifier
+data TypeSpecifier i
     = PrimType PrimitiveTypes
-    | StructType DataLayoutSpec
-    | EnumType EnumSpecifier
+    | StructType (DataLayoutSpec i)
+    | EnumType (EnumSpecifier i)
     | IdentType Identifier
     deriving stock (Eq, Show)
 
@@ -158,71 +154,82 @@ data FunctionSpecifier = FSInline
 data StorageClassSpecifier = SCTypedef | SCExtern | SCStatic | SCAuto | SCRegister
     deriving stock (Eq, Show)
 
-data TypeName = TypeName [SpecifierQualifier] (Maybe AbstractDeclarator)
+data TypeName i = TypeName [SpecifierQualifier i] (Maybe (AbstractDeclarator i))
     deriving stock (Eq, Show)
 
-data AbstractDeclarator
-    = ADPtr Pointer
-    | ADPtrDirect Pointer DirectAbstractDeclarator
-    | ADDirect DirectAbstractDeclarator
+data AbstractDeclarator i
+    = ADPtr [TypeQualifier] (Maybe (AbstractDeclarator i))
+    | Array (Maybe (AbstractDeclarator i)) (Maybe (Expr i))
+    | VarArray (Maybe (AbstractDeclarator i))
+    | Parens (Maybe (AbstractDeclarator i)) [ParameterType i]
+    -- | ADPtrDirect Pointer (AbstractDeclarator i)
+    -- | ADDirect (AbstractDeclarator i)
+    -- | DADeclarator (AbstractDeclarator i)
     deriving stock (Eq, Show)
 
-data DirectAbstractDeclarator
-    = DADeclarator AbstractDeclarator
-    | Array (Maybe DirectAbstractDeclarator) (Maybe Expr)
-    | VarArray (Maybe DirectAbstractDeclarator)
-    | Parens (Maybe DirectAbstractDeclarator) [ParameterType]
+
+-- data AbstractDeclarator i
+--     = ADPtr Pointer
+--     | ADPtrDirect Pointer (DirectAbstractDeclarator i)
+--     | ADDirect (DirectAbstractDeclarator i)
+--     deriving stock (Eq, Show)
+--
+-- data DirectAbstractDeclarator i
+--     = DADeclarator (AbstractDeclarator i)
+--     | Array (Maybe (DirectAbstractDeclarator i)) (Maybe (Expr i))
+--     | VarArray (Maybe (DirectAbstractDeclarator i))
+--     | Parens (Maybe (DirectAbstractDeclarator i)) [ParameterType i]
+--     deriving stock (Eq, Show)
+
+type ParameterType i = ParameterDeclaration i
+
+data Initializer i
+    = InitExpr (Expr i)
+    | InitList [(Maybe [Designator i], Initializer i)]
     deriving stock (Eq, Show)
 
-type ParameterType = ParameterDeclaration
-
-data Initializer
-    = InitExpr Expr
-    | InitList [(Maybe [Designator], Initializer)]
+data Designator i
+    = DesignatorExpr (Expr i)
+    | DesignatorDot i
     deriving stock (Eq, Show)
 
-data Designator
-    = DesignatorExpr Expr
-    | DesignatorDot Identifier
-    deriving stock (Eq, Show)
-
-data Statement
-    = LabeledStmt Identifier Statement
-    | CaseStmt Expr Statement
-    | DefaultStmt Statement
-    | CompoundStmt CompoundStatement
-    | ExpressionStmt (Maybe Expr)
+data Statement i
+    = LabeledStmt i (Statement i)
+    | CaseStmt (Expr i) (Statement i)
+    | DefaultStmt (Statement i)
+    | CompoundStmt (CompoundStatement i)
+    | ExpressionStmt (Maybe (Expr i))
     | -- | SelectionStmt
-      IfStmt Expr Statement (Maybe Statement)
-    | SwitchStmt Expr Statement
+      IfStmt (Expr i) (Statement i) (Maybe (Statement i))
+    | SwitchStmt (Expr i) (Statement i)
     | -- | IterationStmt
-      WhileStmt Expr Statement
-    | DoStmt Statement Expr
-    | ForStmt (Maybe Expr) (Maybe Expr) (Maybe Expr) Statement
-    | ForDeclStmt Declaration (Maybe Expr) (Maybe Expr) Statement
+      WhileStmt (Expr i) (Statement i)
+    | DoStmt (Statement i) (Expr i)
+    | ForStmt (Maybe (Expr i)) (Maybe (Expr i)) (Maybe (Expr i)) (Statement   i)
+    | ForDeclStmt (Declaration i) (Maybe (Expr i)) (Maybe (Expr i)) (Statement   i)
     | -- | JumpStmt
-      GotoStmt Identifier
+      GotoStmt i
     | ContinueStmt
     | BreakStmt
-    | ReturnStmt (Maybe Expr)
+    | ReturnStmt (Maybe (Expr   i))
     deriving stock (Eq, Show)
 
-newtype CompoundStatement = CompoundStatement [BlockItem]
+newtype CompoundStatement   i = CompoundStatement [BlockItem   i]
     deriving stock (Eq, Show)
 
-data BlockItem
-    = BDecl Declaration
-    | BStmt Statement
+data BlockItem   i
+    = BDecl (Declaration   i)
+    | BStmt (Statement   i)
     deriving stock (Eq, Show)
 
-type TranslationUnit = [ExternDecl]
+type TranslationUnit   i = [ExternDecl   i]
 
-data ExternDecl
-    = FunctionDef FunctionDefinition
-    | EDecl Declaration
+data ExternDecl   i
+    = FunctionDef (FunctionDefinition   i)
+    | EDecl (Declaration   i)
     deriving stock (Eq, Show)
 
-data FunctionDefinition = FunctionDefinition [DeclarationSpecifiers] Declarator (Maybe DeclarationList) CompoundStatement
+data FunctionDefinition   i = FunctionDefinition [DeclarationSpecifiers   i] (Declarator   i) (Maybe (DeclarationList   i)) (CompoundStatement   i )
     deriving stock (Eq, Show)
 
-type DeclarationList = [Declaration]
+type DeclarationList   i = [Declaration   i]

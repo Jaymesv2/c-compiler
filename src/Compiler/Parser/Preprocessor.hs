@@ -149,8 +149,8 @@ getAndParseLine =
         [PPEOF] -> pure PPSEnd
         other -> parseLine other
 
-handleLine :: (IOE :> es, State PreprocessorState :> es, Error String :> es, State AlexState :> es) => PPLine -> Eff es [PPToken]
-handleLine line = case line of
+preprocessLine :: (IOE :> es, State PreprocessorState :> es, Error String :> es, State AlexState :> es) => PPLine -> Eff es [PPToken]
+preprocessLine line = case line of
     TextLine line' -> pure line'
     IfLine l -> handleIfLine l $> []
     ControlLine (CLInclude toks) -> handleInclude toks $> []
@@ -219,6 +219,7 @@ stateUpdater inp = case inp of
 {-
 expand each argument, then paste each into the stream and expand again
 -}
+
 expandTokenLine :: M.Map T.Text MacroDef -> [PPToken] -> Either () [PPToken {- :: (State AlexState :> es, Error String :> es, State PreprocessorState :> es) => Eff es () -}]
 expandTokenLine macros = fmap mergeStringLiterals . go []
   where
@@ -279,18 +280,17 @@ ppNextToken = do
     s@PreprocessorState{outQueue = oq, macroSymTbl = mst, concatLookahead = lk} <- get @PreprocessorState
     case oq of
         -- pull a token from the outQueue
-        h : t -> do
-            put (s{outQueue = t, concatLookahead = h})
-            pure lk
-        [] -> case lk of
-            PPEOF -> pure PPEOF
-            _ -> do
-                tokenLine <- getAndParseLine >>= handleLine
-                case expandTokenLine mst tokenLine of
-                    Left () -> throwError "failed to expand tokens"
-                    Right expanded -> do
-                        modify (\s' -> s'{outQueue = expanded})
-                        ppNextToken
+        h : t -> put (s{outQueue = t, concatLookahead = h}) $> lk
+        -- end of input so stop
+        [] | lk == PPEOF -> pure PPEOF
+        -- get more
+        [] -> do
+            tokenLine <- getAndParseLine >>= preprocessLine
+            case expandTokenLine mst tokenLine of
+                Left () -> throwError "failed to expand tokens"
+                Right expanded -> do
+                    modify (\s' -> s'{outQueue = expanded})
+                    ppNextToken
 
 runPreprocessor :: (State AlexState :> es, Error String :> es) => Eff (State SymbolTable ': State PreprocessorState ': es) a -> Eff es a
 runPreprocessor = evalState newPreprocessorState . evalState SymTbl.empty
@@ -302,7 +302,6 @@ preprocess :: (IOE :> es, Error String :> es, State AlexState :> es, State Prepr
 preprocess = do
     nextToken <- ppNextToken
     symTbl <- get
-
     case ppTokenToToken (convertIdent symTbl) nextToken of
         Left () -> throwError "something"
         Right Nothing -> preprocess

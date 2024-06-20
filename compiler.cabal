@@ -123,9 +123,11 @@ library compiler-lib
     Compiler.Parser.ParseTree
     Compiler.Parser.Preprocessor
     Compiler.Parser.PreprocessorGrammar
+    Compiler.Parser.ParserState
     Compiler.Parser.Lexer
     Compiler.Parser.TokenParsers
     Compiler.Parser.Grammar
+    Compiler.Parser.GrammarHelpers
     Compiler.Parser
     Compiler.SymbolTable
     Compiler.AST
