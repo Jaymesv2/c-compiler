@@ -3,6 +3,7 @@ module Compiler.Types where
 import Compiler.Parser
 import Compiler.Parser.Tokens ()
 import Data.Text.Internal.Fusion.Types (RS(RS0))
+import GHC.Exts
 
 {-
 3 different kinds of types:
@@ -97,11 +98,19 @@ Abstract declarators only specify a type name, no identifiers.
 
 
 -- page 46
-newtype Unique = Unique Int deriving (Eq, Show)
+newtype Unique = MkUnique Int deriving stock (Eq, Show)
 
-newtype EnumID = MkEnum Unique deriving (Eq, Show)
+--instance Show Unique where
 
-newtype TypeID = MkType Unique deriving (Eq, Show)
+--newtype LabelID = MkLabel Unique deriving stock (Eq, Show)
+
+
+--newtype MemberID = MkIdent Unique deriving stock (Eq, Show)
+
+newtype OrdinaryID = MkOrdinary Unique deriving stock (Eq, Show)
+
+newtype TagID = MkData Unique deriving stock (Eq, Show)
+
 
 data StorageClassQualifier
     = Typedef
@@ -118,10 +127,16 @@ data TypeQualifiers = TypeQualifiers
     }
     deriving stock (Eq, Show)
 
+-- mergeQualifiers :: TypeQualifiers -> TypeQualifiers -> Either 
+
 instance Semigroup TypeQualifiers where
     (TypeQualifiers{constq = ca, restrict = ra, volatile = va})
         <> (TypeQualifiers{constq = cb, restrict = rb, volatile = vb}) =
             TypeQualifiers{constq = ca || cb, restrict = ra || rb, volatile = va || vb}
+
+instance Monoid TypeQualifiers where
+    mempty = emptyQualifier
+
 
 emptyQualifier = TypeQualifiers{constq = False, restrict = False, volatile = False}
 constTypeQualifier, restrictTypeQualifier, volatileTypeQualifier :: TypeQualifiers
@@ -138,9 +153,7 @@ data CType
     | StructTy CStruct
     | UnionTy CUnion
     | FuncTy CFunc
-    | EnumTy EnumID
     | PointerTy TypeQualifiers CType
-    | TyRef
     deriving stock (Eq, Show)
 
 data CFunc = CFunc CType [CType] Bool

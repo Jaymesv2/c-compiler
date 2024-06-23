@@ -55,7 +55,7 @@ data Expr i
 -- must have at least one type specifier,
 -- page 97
 
-data Declaration i = Declaration [DeclarationSpecifiers i] (Maybe [InitDeclaration i])
+data Declaration i = Declaration [DeclarationSpecifiers i] [InitDeclaration i]
     deriving stock (Eq, Show)
 
 -- data Declaration = Declaration (Maybe StorageClassSpecifier) Identifier
@@ -205,8 +205,8 @@ data Statement i
     | -- | IterationStmt
       WhileStmt (Expr i) (Statement i)
     | DoStmt (Statement i) (Expr i)
-    | ForStmt (Maybe (Expr i)) (Maybe (Expr i)) (Maybe (Expr i)) (Statement   i)
-    | ForDeclStmt (Declaration i) (Maybe (Expr i)) (Maybe (Expr i)) (Statement   i)
+    | ForStmt (Maybe (Expr i)) (Maybe (Expr i)) (Maybe (Expr i)) (Statement i)
+    | ForDeclStmt (Declaration i) (Maybe (Expr i)) (Maybe (Expr i)) (Statement i)
     | -- | JumpStmt
       GotoStmt i
     | ContinueStmt
@@ -218,7 +218,7 @@ newtype CompoundStatement   i = CompoundStatement [BlockItem   i]
     deriving stock (Eq, Show)
 
 data BlockItem   i
-    = BDecl (Declaration   i)
+    = BDecl (Declaration i)
     | BStmt (Statement   i)
     deriving stock (Eq, Show)
 
@@ -226,7 +226,7 @@ type TranslationUnit   i = [ExternDecl   i]
 
 data ExternDecl   i
     = FunctionDef (FunctionDefinition   i)
-    | EDecl (Declaration   i)
+    | EDecl (Declaration i)
     deriving stock (Eq, Show)
 
 data FunctionDefinition   i = FunctionDefinition [DeclarationSpecifiers   i] (Declarator   i) (Maybe (DeclarationList   i)) (CompoundStatement   i )

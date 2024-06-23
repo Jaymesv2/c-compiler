@@ -292,8 +292,8 @@ ConstExpr :: { Expr Identifier }
     : Expr   { $1 }
 
 Declaration :: { Declaration Identifier }
-    : DeclarationSpecifiers InitDeclarationList ';' { Declaration $1 (Just $ reverse $2) }
-    | DeclarationSpecifiers ';'                     { Declaration $1 Nothing  }
+    : DeclarationSpecifiers InitDeclarationList ';' { Declaration $1 (reverse $2) }
+    | DeclarationSpecifiers ';'                     { Declaration $1 []  }
 
 -- page 97
 
