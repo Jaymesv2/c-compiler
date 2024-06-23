@@ -101,6 +101,7 @@
           indentation = 2;
           comma-style = "leading";
           record-brace-space = true;
+          # haskellPackages.
           indent-wheres = true;
           import-export-style = "diff-friendly";
           respectful = true;
@@ -125,6 +126,7 @@
           nativeBuildInputs = with pkgs; [
             just
             csmith
+            haskellPackages.fast-tags
           ];
         };
       };
