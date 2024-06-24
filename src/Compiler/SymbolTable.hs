@@ -51,6 +51,12 @@ enterScope s@SymbolTable{scope= sc :| lst } = s{scope=sc :| (sc : lst)}
 exitScope :: SymbolTable -> Maybe SymbolTable
 exitScope s@SymbolTable{scope=(h:|t)} = (\(_,t') -> s{scope=h:|t'}) <$> uncons t
 
+
+defineIdent :: Identifier -> OrdinaryDef -> Eff es OrdinaryID
+defineIdent ident def = error ""
+
+
+
 -- exitScope s@SymbolTable{scope=(_ :| (h : t))} = Just $ s{scope= h :| t }
 -- exitScope _ = Nothing
 
@@ -77,8 +83,9 @@ data OrdinaryDef
         , currentDefinition :: Bool
         }
     | VariableDef 
-        { name :: T.Text,
-          varType :: CType
+        { name :: T.Text
+        , varType :: CType
+        --, storeageClass :: StorageClass
         }
     | TypeAlias 
         { name :: T.Text

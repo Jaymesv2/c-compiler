@@ -3,10 +3,10 @@ name:               compiler
 version:            0.1.0.0
 license:            MIT
 copyright:          2024  Trent Turner
---maintainer:         
+-- maintainer:         
 author:             Trent Turner
---category:           
---homepage:           
+-- category:           
+-- homepage:           
 
 -- TODO: Before hackage release.
 -- A short (one-line) description of the package.

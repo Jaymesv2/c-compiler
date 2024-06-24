@@ -121,32 +121,6 @@ import Effectful.State.Static.Local
     -- '#'     { Punctuator Stringize }
     -- '##'    { Punctuator TokenPaste}
 
-
--- %name declaration Declaration
--- 
--- %name declarator Declarator
--- %name directDeclarator DirectDeclarator
--- %name directAbstractDeclarator DirectAbstractDeclarator
--- %name abstractDeclarator AbstractDeclarator
--- 
--- %name typeSpecifier TypeSpecifier
--- %name typeQualifier TypeQualifier
--- %name structOrUnionSpecifier StructOrUnionSpecifier
--- 
--- %name externalDeclaration ExternalDeclaration
--- %name functionDefinition FunctionDefinition
--- %name translationUnit TranslationUnit
--- 
--- %name parameterDeclaration ParameterDeclaration
--- %name parameterList ParameterList
--- %name identifierList IdentifierList
--- 
--- 
--- %name statement Statement
--- %name compoundStatement CompoundStatement
--- %name blockItem BlockItem
--- %name selectionStatement SelectionStatement
--- %name iterationStatement IterationStatement
 {-
 %left '||'
 %left '&&'
@@ -326,7 +300,7 @@ StorageClassSpecifier :: { StorageClassSpecifier  }
     | auto      { SCAuto        }
     | register  { SCRegister    }
 
-    -- this needs to have the standard types and stuf
+    -- this needs to have the standard types and stuff
 -- page 99
 TypeSpecifier :: { TypeSpecifier Identifier }
     : void                      { PrimType PVoid        }
@@ -428,9 +402,6 @@ EnumerationConstant :: { Identifier }
     : ident { $1 :: Identifier }
 
 -- Page 114
-{-Declarator :: { Declarator }
-    : Pointer DirectDeclarator      { Declarator (Just $1) $2 :: Declarator }
-    | DirectDeclarator              { Declarator Nothing $1   :: Declarator }-}
 {-
 Full Declarator: declarator not part of another declarator
     Full Declarators can be terminated by a variable length array type
@@ -473,7 +444,6 @@ Pointer :: { forall a b. ([TypeQualifier] -> a -> b) -> (b -> a) -> a -> b }
     -- | '*' TypeQualifierList Pointer { \constr (c :: a) d -> constr (reverse $2) (($3 constr) c)  }
     | '*' Pointer                   { \constr d c  -> constr [] (d ($2 constr d c)) }
 
---TypeQualifierList       : TypeQualifierListI                { reverse $1 :: [TypeQualifier] }
 TypeQualifierList :: {[TypeQualifier ]}
     : TypeQualifier                     { [ $1 ]  }
     | TypeQualifierList TypeQualifier  { $2 : $1   }
@@ -496,7 +466,7 @@ IdentifierList :: { [Identifier] }
     | IdentifierList ',' ident { $3 : $1 }
 
 -- page 122
-TypeName :: {TypeName Identifier }
+TypeName :: { TypeName Identifier }
     : SpecifierQualifierList AbstractDeclarator { TypeName (reverse $1) (Just $2) }
     | SpecifierQualifierList                    { TypeName (reverse $1) Nothing   }
 
@@ -629,35 +599,21 @@ BlockItemList :: { [BlockItem Identifier] }
 
 -- page 140
 
---DeclarationList :: { [Declaration Identifier] }
---    : Declaration                   { [ $1 ] }
---    | DeclarationList  Declaration { $2 : $1 }
---
---ExternalDeclaration :: { ExternDecl Identifier }
---    : FunctionDefinition    {(FunctionDef $1)   }
---    | Declaration           {(EDecl $1)         }
---
---FunctionDefinition :: { FunctionDefinition Identifier }
---    : DeclarationSpecifiers Declarator DeclarationList CompoundStatement    {FunctionDefinition $1 $2 (Just (reverse $3)) $4 }
---    | DeclarationSpecifiers Declarator CompoundStatement                    {FunctionDefinition $1 $2 Nothing $3             }
-
-
 DeclarationList :: { [Declaration Identifier] }
     : DeclarationList  Declaration  { $2 : $1 }
     |                               { [] }
 
 FunctionDefinition :: { FunctionDefinition Identifier }
     : DeclarationSpecifiers Declarator DeclarationList CompoundStatement    {FunctionDefinition $1 $2 (Just $ reverse $3) $4 }
-    --| DeclarationSpecifiers Declarator CompoundStatement                    {FunctionDefinition $1 $2 Nothing $3             }
 
 ExternalDeclaration :: { ExternDecl Identifier }
     : FunctionDefinition    {FunctionDef $1   }
     | Declaration           {EDecl $1         }
 
-TranslationUnit :: { TranslationUnit Identifier }
-    : TranslationUnitI   {reverse $1 }
+TranslationUnit :: { [ExternDecl Identifier] }
+    : TranslationUnitI   { reverse $1 }
 
-TranslationUnitI :: { TranslationUnit Identifier }
+TranslationUnitI :: { [ExternDecl Identifier] }
     : ExternalDeclaration                    { [ $1 ] }
     | TranslationUnitI ExternalDeclaration   { $2 : $1 }
 
@@ -665,26 +621,6 @@ TranslationUnitI :: { TranslationUnit Identifier }
 -- PREPROCESSING
 
 --
--- data E a = Ok a | Failed String
---
--- thenE :: E a -> (a -> E b) -> E b
--- m `thenE` k =
---    case m of
---        Ok a     -> k a
---        Failed e -> Failed e
---
--- returnE :: a -> E a
--- returnE a = Ok a
---
--- failE :: String -> E a
--- failE err = Failed err
---
--- catchE :: E a -> (String -> E a) -> E a
--- catchE m k =
---    case m of
---       Ok a     -> Ok a
---       Failed e -> k e
-
 
 
 {

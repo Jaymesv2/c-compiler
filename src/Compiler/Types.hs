@@ -75,10 +75,9 @@ data Basic
 --   the real domain comprises the real types
 --   the complex comain comprises the complex types
 
-daom a:messagea Void = Void
-    deriviom a:messageg stock (Eq, Show)
+data Void = Void
+    deriving stock (Eq, Show)
 
-om a:message
 -}
 
 {-
