@@ -24,6 +24,7 @@ data PPSpecial
 
 data Token
   = Ident Identifier -- T.Text
+  | PreIdent
   | TTypeName Identifier
   | TEnumConst Identifier
   | StringLiteral T.Text

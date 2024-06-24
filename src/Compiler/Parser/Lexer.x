@@ -1,6 +1,6 @@
 {
 -- {-# LANGUAGE NoMonomorphismRestriction #-}
-module Compiler.Parser.Lexer (alexMonadScan, runAlex, AlexState, newAlexState, printTokens) where
+module Compiler.Parser.Lexer (alexMonadScan, runAlex, AlexState, newAlexState, printTokens, alexConduit, alexPrintCondTokens) where
 
 import Compiler.Parser
 import Compiler.SymbolTable
@@ -12,6 +12,8 @@ import Data.Word (Word8)
 
 import Data.Bits qualified
 import Data.Char (ord)
+
+import Conduit
 
 
 import qualified Data.Text as T
@@ -203,6 +205,23 @@ alexGetStartCode = get <&> \AlexState{alex_scd=sc} -> sc
 
 alexSetStartCode :: State AlexState :> es => Int -> Eff es ()
 alexSetStartCode sc = modify (\s -> s{alex_scd=sc}) 
+
+
+alexConduit :: (Error String :> es, State AlexState :> es) => ConduitT i PPToken (Eff es) ()
+alexConduit = do
+    token <- lift alexMonadScan
+    case token of
+        PPEOF -> pure ()
+        n -> do
+            yield token
+            alexConduit
+
+
+print' :: (IOE :> es, Show a) => a -> Eff es ()
+print' x = liftIO $ print x
+
+alexPrintCondTokens :: (IOE :> es) => T.Text -> Eff es ()
+alexPrintCondTokens inp = runAlex inp (runConduit $ (alexConduit .| mapM_C (print' ) .| sinkNull)) $> ()
 
 alexMonadScan :: (Error String :> es, State AlexState :> es) => Eff es PPToken
 alexMonadScan = do
