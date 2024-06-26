@@ -1,125 +1,127 @@
 {
 {-# LANGUAGE NoMonomorphismRestriction #-}
-module Compiler.Parser.Grammar where
+module Compiler.Parser.Grammar(clike, injectTypeNameTokens) where
 
 import Compiler.Parser.Lexer (AlexState)
 import Compiler.Parser.Preprocessor (preprocess, PreprocessorState)
 
 import Compiler.Parser.ParseTree
 import Compiler.Parser.Tokens
-import Compiler.SymbolTable (SymbolTable)
+import Compiler.SymbolTable (SymbolTable, isType)
 import Compiler.Parser.GrammarHelpers
+import Data.Map qualified as M
 --data ParseError = ParseError
 
 import Effectful
 import Effectful.Error.Static
 import Effectful.State.Static.Local
 
+import Conduit
 }
 
 %name clike TranslationUnit
 %name expr Expr
 
-%monad {(IOE :> es, Error String :> es, State AlexState :> es, State SymbolTable :> es, State PreprocessorState :> es )}  {Eff es} {>>=} {return}
+%monad {(IOE :> es, Error String :> es, State AlexState :> es, State SymbolTable :> es, State PreprocessorState :> es )}  {ConduitT Token Void (Eff es) } {>>=} {return}
 --%lexer {lexer} {EOF}
-%lexer {(preprocess >>=)} {EOF}
+%lexer {(await >>=)} {Nothing}
 
 %errorhandlertype explist
 %error {parseError}
-%tokentype { Token }
+%tokentype { Maybe Token }
 
 %token
-    ident   { Ident $$ }
-    typeName{ TTypeName $$ }
-    stringlit { StringLiteral $$ }
-    constant  { Constant $$ }
+    ident   { Just (Ident $$) }
+    typeName{ Just (TTypeName $$) }
+    stringlit { Just (StringLiteral $$) }
+    constant  { Just (Constant $$) }
 
-    auto    { Keyword Auto  }
-    break   { Keyword Break }
-    case    { Keyword Case }
-    const   { Keyword Const }
-    continue{ Keyword Continue }
-    default { Keyword Default }
-    do      { Keyword Do }
-    else    { Keyword Else }
-    extern  { Keyword Extern }
-    enum    { Keyword Enum }
-    for     { Keyword For }
-    goto    { Keyword Goto}
-    if      { Keyword If }
-    inline  { Keyword Inline }
-    register{ Keyword Register }
-    restrict{ Keyword Restrict }
-    return  { Keyword Return }
-    sizeof  { Keyword Sizeof}
-    static  { Keyword TStatic }
-    struct  { Keyword Struct}
-    switch  { Keyword Switch }
-    typedef { Keyword TypeDef }
-    union   { Keyword Union }
-    volatile{ Keyword Volatile}
-    while   { Keyword While}
-    void    { Keyword Void }
-    char    { Keyword TChar }
-    short   { Keyword TShort }
-    int     { Keyword TInt }
-    long    { Keyword TLong}
-    float   { Keyword TFloat}
-    double  { Keyword TDouble}
-    signed  { Keyword TSigned}
-    unsigned{ Keyword TUnsigned}
-    uBool   { Keyword TuBool}
-    uComplex { Keyword TuComplex}
-    uImaginary { Keyword TuImaginary}
-    '{'     { Punctuator LBrace }
-    '}'     { Punctuator RBrace }
-    '('     { Punctuator LParen }
-    ')'     { Punctuator RParen }
-    '['     { Punctuator LBrack }
-    ']'     { Punctuator RBrack }
-    '->'    { Punctuator Arrow  }
-    '&'     { Punctuator BitAnd }
-    '|'     { Punctuator BitOr   }
-    '*'     { Punctuator Times }
-    '+'     { Punctuator Plus }
-    '-'     { Punctuator Minus }
-    '~'     { Punctuator Compliment }
-    '!'     { Punctuator Not }
-    '/'     { Punctuator Divide }
-    '%'     { Punctuator Modulo }
-    '<<'    { Punctuator LShift } 
-    '>>'    { Punctuator RShift } 
-    '<'     { Punctuator Lt     }
-    '<='    { Punctuator Le     }
-    '>'     { Punctuator Gt     }
-    '>='    { Punctuator Ge     }
-    '=='    { Punctuator Eq     }
-    '!='    { Punctuator Neq    }
-    '^'     { Punctuator BitXor }
-    '&&'    { Punctuator LAnd   }
-    '||'    { Punctuator LOr    }
-    ';'     { Punctuator Semi   }
-    '='     { Punctuator Assign }
-    ','     { Punctuator Comma  }
-    '.'     { Punctuator Dot }
-    ':'     { Punctuator Colon}
+    auto    { Just (Keyword Auto)  }
+    break   { Just (Keyword Break) }
+    case    { Just (Keyword Case) }
+    const   { Just (Keyword Const) }
+    continue{ Just (Keyword Continue) }
+    default { Just (Keyword Default) }
+    do      { Just (Keyword Do) }
+    else    { Just (Keyword Else) }
+    extern  { Just (Keyword Extern) }
+    enum    { Just (Keyword Enum) }
+    for     { Just (Keyword For) }
+    goto    { Just (Keyword Goto) }
+    if      { Just (Keyword If) }
+    inline  { Just (Keyword Inline) }
+    register{ Just (Keyword Register) }
+    restrict{ Just (Keyword Restrict) }
+    return  { Just (Keyword Return) }
+    sizeof  { Just (Keyword Sizeof) }
+    static  { Just (Keyword TStatic) }
+    struct  { Just (Keyword Struct) }
+    switch  { Just (Keyword Switch) }
+    typedef { Just (Keyword TypeDef) }
+    union   { Just (Keyword Union) }
+    volatile{ Just (Keyword Volatile) }
+    while   { Just (Keyword While) }
+    void    { Just (Keyword Void) }
+    char    { Just (Keyword TChar) }
+    short   { Just (Keyword TShort) }
+    int     { Just (Keyword TInt) }
+    long    { Just (Keyword TLong) }
+    float   { Just (Keyword TFloat) }
+    double  { Just (Keyword TDouble) }
+    signed  { Just (Keyword TSigned) }
+    unsigned{ Just (Keyword TUnsigned) }
+    uBool   { Just (Keyword TuBool) }
+    uComplex { Just (Keyword TuComplex) }
+    uImaginary { Just (Keyword TuImaginary) }
+    '{'     { Just (Punctuator LBrace) }
+    '}'     { Just (Punctuator RBrace) }
+    '('     { Just (Punctuator LParen) }
+    ')'     { Just (Punctuator RParen) }
+    '['     { Just (Punctuator LBrack) }
+    ']'     { Just (Punctuator RBrack) }
+    '->'    { Just (Punctuator Arrow)  }
+    '&'     { Just (Punctuator BitAnd) }
+    '|'     { Just (Punctuator BitOr)   }
+    '*'     { Just (Punctuator Times) }
+    '+'     { Just (Punctuator Plus) }
+    '-'     { Just (Punctuator Minus) }
+    '~'     { Just (Punctuator Compliment) }
+    '!'     { Just (Punctuator Not) }
+    '/'     { Just (Punctuator Divide) }
+    '%'     { Just (Punctuator Modulo) }
+    '<<'    { Just (Punctuator LShift) } 
+    '>>'    { Just (Punctuator RShift) } 
+    '<'     { Just (Punctuator Lt)     }
+    '<='    { Just (Punctuator Le)     }
+    '>'     { Just (Punctuator Gt)     }
+    '>='    { Just (Punctuator Ge)     }
+    '=='    { Just (Punctuator Eq)     }
+    '!='    { Just (Punctuator Neq)    }
+    '^'     { Just (Punctuator BitXor) }
+    '&&'    { Just (Punctuator LAnd)   }
+    '||'    { Just (Punctuator LOr)    }
+    ';'     { Just (Punctuator Semi)   }
+    '='     { Just (Punctuator Assign) }
+    ','     { Just (Punctuator Comma)  }
+    '.'     { Just (Punctuator Dot) }
+    ':'     { Just (Punctuator Colon)}
 
-    '++'    { Punctuator PlusPlus }
-    '--'    { Punctuator MinusMinus }
-    '?'     { Punctuator Question  }
-    '...'   { Punctuator Variadic  }
-    '*='    { Punctuator TimesAssign }
-    '/='    { Punctuator DivAssign}
-    '%='    { Punctuator ModAssign}
-    '+='    { Punctuator PlusAssign}
-    '-='    { Punctuator MinusAssign}
-    '<<='   { Punctuator LShiftAssign}
-    '>>='   { Punctuator RShiftAssign}
-    '&='    { Punctuator AndAssign}
-    '^='    { Punctuator XorAssign}
-    '|='    { Punctuator OrAssign}
-    -- '#'     { Punctuator Stringize }
-    -- '##'    { Punctuator TokenPaste}
+    '++'    { Just (Punctuator PlusPlus) }
+    '--'    { Just (Punctuator MinusMinus) }
+    '?'     { Just (Punctuator Question)  }
+    '...'   { Just (Punctuator Variadic)  }
+    '*='    { Just (Punctuator TimesAssign) }
+    '/='    { Just (Punctuator DivAssign) }
+    '%='    { Just (Punctuator ModAssign) }
+    '+='    { Just (Punctuator PlusAssign) }
+    '-='    { Just (Punctuator MinusAssign) }
+    '<<='   { Just (Punctuator LShiftAssign) }
+    '>>='   { Just (Punctuator RShiftAssign) }
+    '&='    { Just (Punctuator AndAssign) }
+    '^='    { Just (Punctuator XorAssign) }
+    '|='    { Just (Punctuator OrAssign) }
+    -- '#'     { Just (Punctuator Stringize) }
+    -- '##'    { Just (Punctuator TokenPaste) }
 
 {-
 %left '||'
@@ -624,9 +626,23 @@ TranslationUnitI :: { [ExternDecl Identifier] }
 
 
 {
+
+
 --parseError :: Error String :> es => (Token, [String]) -> Eff es a
-parseError :: (Error String :> es, State AlexState :> es, State SymbolTable :> es) => (Token, [String]) -> Eff es a
-parseError (t, tokens) = error $ "something failed :(, failed on token: \"" ++  show t ++ "\"possible tokens: " ++ show tokens  
+parseError :: (Error String :> es, State AlexState :> es, State SymbolTable :> es) => (Maybe Token, [String]) -> ConduitT Token Void (Eff es) a
+parseError (t, tokens) = lift $ error $ "something failed :(, failed on token: \"" ++  show t ++ "\"possible tokens: " ++ show tokens  
+
+injectTypeNameTokens :: (State SymbolTable :> es) => ConduitT Token Token (Eff es) ()
+injectTypeNameTokens = await >>= \case
+    Just (Ident i) -> do
+        tbl <- lift get
+        yield $ if isType i tbl
+            then TTypeName i
+            else Ident i
+        injectTypeNameTokens
+    Just x -> yield x >> injectTypeNameTokens
+    Nothing -> pure ()
+
 
 }
 

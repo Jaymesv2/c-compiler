@@ -25,7 +25,7 @@ import Effectful.State.Static.Local
 
 %name parseLine Line
 
---%monad {(Error String :> es, State AlexState :> es, State SymbolTable :> es) }  {Eff es} {>>=} {return}
+--%monad {(Error String :> es, State AlexState :> es) }  {Eff es} {>>=} {return}
 %monad {(Error String :> es) }  {Eff es} {>>=} {return}
 
 --%lexer {lexer} {PPSpecial PPNewline}
@@ -65,7 +65,6 @@ import Effectful.State.Static.Local
     stringlit   { PPStringLiteral $$ }
     punct       { PPPunctuator $$ }
     other       { PPOther $$   }
-    ppeof       { PPEOF }
 
 
 
@@ -117,7 +116,6 @@ Line :: { PPLine }
     | ControlLine       { ControlLine $1 }
     | TextLine          { TextLine $1  }
     | '#' ident         { NonDirective $2 }
-    | ppeof             { PPSEnd }
 
 
 IfLine :: { PPIfLine }
@@ -175,7 +173,7 @@ data PPLine
     | ControlLine PPControlLine
     | TextLine [PPToken]
     | NonDirective Identifier
-    | PPSEnd
+    -- | PPSEnd
     deriving stock (Eq, Show)
 
 data PPIfLine

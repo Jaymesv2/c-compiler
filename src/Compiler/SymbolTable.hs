@@ -110,6 +110,7 @@ isType ident (SymbolTable {scope = ((map,_):|_)}) = case M.lookup ident map of
         _ -> False
     
 
+
 -- SymbolTableScope{types = typs} :| _)) = isJust $ M.lookup ident typs
 
 

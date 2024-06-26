@@ -1,6 +1,6 @@
 {
 -- {-# LANGUAGE NoMonomorphismRestriction #-}
-module Compiler.Parser.Lexer (alexMonadScan, runAlex, AlexState, newAlexState, printTokens, alexConduit, alexPrintCondTokens) where
+module Compiler.Parser.Lexer (alexMonadScan, runAlex, AlexState, newAlexState, printTokens, alexConduit, alexConduitSource, alexPrintCondTokens) where
 
 import Compiler.Parser
 import Compiler.SymbolTable
@@ -31,7 +31,7 @@ import Effectful.Error.Static
 import Effectful.State.Static.Local
 }
 
-%action "AlexInput -> Int -> Eff es PPToken"
+%action "AlexInput -> Int -> Eff es (Maybe PPToken)"
 %typeclass "(State AlexState :> es, Error String :> es)"
 
 $digit = [0-9] 
@@ -60,7 +60,7 @@ tokens :-
 <0> "}"                       { punctuator RBrace }
 -- 
 <0> [$white]^"("              { punctuator LParen }
-<0> [^$white]^"("             { \_ _ -> pure $ PPSpecial PPSLParen }
+<0> [^$white]^"("             { \_ _ -> pure $ Just $ PPSpecial PPSLParen }
 <0> ")"                       { punctuator RParen }
 <0> "["                       { punctuator LBrack }
 <0> "]"                       { punctuator RBrack }
@@ -107,31 +107,31 @@ tokens :-
 <0> "#"                       { punctuator Stringize   }
 <0> "##"                      { punctuator TokenPaste  }
 -- string literals
-<0>  \" @schar+ \"              { \(_,_,_,t) i -> pure $ PPStringLiteral (T.take (i - 2) (T.tail t)) }
+<0>  \" @schar+ \"              { \(_,_,_,t) i -> pure $ Just $ PPStringLiteral (T.take (i - 2) (T.tail t)) }
 -- wide string literals
-<0>  "L\"" @schar+ \"              { \(_,_,_,t) i -> pure $ PPStringLiteral (T.take (i-3) (T.tail . T.tail $ t)) } 
+<0>  "L\"" @schar+ \"              { \(_,_,_,t) i -> pure $ Just $ PPStringLiteral (T.take (i-3) (T.tail . T.tail $ t)) } 
 
-<0>  \' @cchar+ \'          { \(_,_,_,t) i -> pure $ PPCharConst (T.take (i-2) (T.tail t))}
+<0>  \' @cchar+ \'          { \(_,_,_,t) i -> pure $ Just $ PPCharConst (T.take (i-2) (T.tail t))}
 
 
-<0>  $nondigit $identnondigit* { \(_,_,_,t) i -> pure $ PPIdent (T.take i t) }
+<0>  $nondigit $identnondigit* { \(_,_,_,t) i -> pure $ Just $ PPIdent (T.take i t) }
 
-<0>  ([^$white] # [$nondigit $digit \'\" \( \) \{ \} \[ \] \| \* \+ \~ \- \; \, \? \. \^ \/ \# \> \< & \% ! = : ]) [^$white]*  { \(_,_,_,t) i -> pure $ PPOther (T.take i t)}
+<0>  ([^$white] # [$nondigit $digit \'\" \( \) \{ \} \[ \] \| \* \+ \~ \- \; \, \? \. \^ \/ \# \> \< & \% ! = : ]) [^$white]*  { \(_,_,_,t) i -> pure $ Just $ PPOther (T.take i t)}
 
 -- this is a hack and I dont like it but it works :/
 -- headernames
-<0>  "<" [^\n>]+ ">"              { \(_,_,_,t) i -> pure $ PPHeaderName (T.take (i-2) (T.tail t)) }
--- <0>  \" [^\n\"] \"           { \(_,_,_,t) i -> pure $ error "e" }
+<0>  "<" [^\n>]+ ">"              { \(_,_,_,t) i -> pure $ Just $ PPHeaderName (T.take (i-2) (T.tail t)) }
+-- <0>  \" [^\n\"] \"           { \(_,_,_,t) i -> pure $ Just $ error "e" }
 
         -- preprocessing numbers
-<0>  "."? $digit ($digit | $identnondigit | [eEpP] @sign | ".")* {\(_,_,_,t) i -> pure $ PPNumber (T.take i t)}
+<0>  "."? $digit ($digit | $identnondigit | [eEpP] @sign | ".")* {\(_,_,_,t) i -> pure $ Just $ PPNumber (T.take i t)}
 <0>  ($white # [\n])+;
 
 
 
 <0>  \\\n ; -- dont emit a newline if (physical line concatenation)
-<0>  \n {\_ _ -> pure $ PPSpecial PPNewline}
--- <0>  [\n] {\(_,_,_,t) i -> pure $ PPNewline}
+<0>  \n {\_ _ -> pure $ Just $ PPSpecial PPNewline}
+-- <0>  [\n] {\(_,_,_,t) i -> pure $ Just $ PPNewline}
 
 
 
@@ -149,14 +149,15 @@ tokens :-
 
 {
 
-basicAction :: (State AlexState :> es) => Token -> (AlexInput -> Int -> Eff es Token)
-basicAction token _ _ = pure token
 
-punctuator :: (State AlexState :> es) => Punctuator -> (AlexInput -> Int -> Eff es PPToken)
-punctuator token _ _ = pure $ PPPunctuator token
+--basicAction :: (State AlexState :> es) => Token -> (AlexInput -> Int -> Eff es Token)
+--basicAction token _ _ = pure token
 
-alexEOF :: Eff es PPToken
-alexEOF = pure PPEOF
+punctuator :: (State AlexState :> es) => Punctuator -> (AlexInput -> Int -> Eff es (Maybe PPToken))
+punctuator token _ _ = pure $ Just $ PPPunctuator token
+
+alexEOF :: Eff es (Maybe PPToken)
+alexEOF = pure Nothing
 
 
 -- -----------------------------------------------------------------------------
@@ -178,13 +179,15 @@ runAlex :: T.Text -> Eff (State AlexState ': Error String ':  es) a -> Eff es (E
 runAlex input__ = runError . evalState (newAlexState input__)
 
 
+
 printTokens :: (IOE :> es, State AlexState :> es, Error String :> es) => Eff es ()
 printTokens = do
     token <- alexMonadScan
     liftIO $ print token
     case token of
-        PPEOF -> pure ()
-        _ -> printTokens
+        Nothing -> pure ()
+        Just _ -> printTokens 
+
 
 
 alexGetInput :: State AlexState :> es => Eff es AlexInput
@@ -207,13 +210,24 @@ alexSetStartCode :: State AlexState :> es => Int -> Eff es ()
 alexSetStartCode sc = modify (\s -> s{alex_scd=sc}) 
 
 
+alexConduitSource :: (Error String :> es) => T.Text -> ConduitT i PPToken (Eff es) ()
+alexConduitSource contents = loop (newAlexState contents)
+    where
+        loop s = do
+            (token,s') <- lift $ runState s alexMonadScan
+            case token of
+                Nothing -> pure ()
+                Just n -> do
+                    yield n
+                    loop s'
+
 alexConduit :: (Error String :> es, State AlexState :> es) => ConduitT i PPToken (Eff es) ()
 alexConduit = do
     token <- lift alexMonadScan
     case token of
-        PPEOF -> pure ()
-        n -> do
-            yield token
+        Nothing -> pure ()
+        Just n -> do
+            yield n
             alexConduit
 
 
@@ -223,7 +237,7 @@ print' x = liftIO $ print x
 alexPrintCondTokens :: (IOE :> es) => T.Text -> Eff es ()
 alexPrintCondTokens inp = runAlex inp (runConduit $ (alexConduit .| mapM_C (print' ) .| sinkNull)) $> ()
 
-alexMonadScan :: (Error String :> es, State AlexState :> es) => Eff es PPToken
+alexMonadScan :: (Error String :> es, State AlexState :> es) => Eff es (Maybe PPToken)
 alexMonadScan = do
   inp__ <- alexGetInput
   sc <- alexGetStartCode

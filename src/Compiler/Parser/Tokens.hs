@@ -14,7 +14,7 @@ data PPToken
   | PPOther T.Text
   | -- | PPNewline
     PPSpecial PPSpecial
-  | PPEOF
+  -- | PPEOF
   deriving stock (Eq)
 
 data PPSpecial
@@ -24,14 +24,13 @@ data PPSpecial
 
 data Token
   = Ident Identifier -- T.Text
-  | PreIdent
   | TTypeName Identifier
   | TEnumConst Identifier
   | StringLiteral T.Text
   | Constant Constant
   | Punctuator Punctuator
   | Keyword Keyword
-  | EOF
+  -- | EOF
   deriving stock (Eq, Show)
 
 -- operations
@@ -264,4 +263,4 @@ instance Show PPToken where
   show (PPOther t) = T.unpack t
   show (PPSpecial PPSLParen) = "("
   show (PPSpecial PPNewline) = "NL"
-  show PPEOF = "EOF"
+  -- show PPEOF = "EOF"

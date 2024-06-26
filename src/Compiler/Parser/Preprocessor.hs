@@ -1,4 +1,4 @@
-module Compiler.Parser.Preprocessor (preprocess, PreprocessorState, printPPTokens, runPreprocessor) where
+module Compiler.Parser.Preprocessor (preprocess, PreprocessorState, runPreprocessor) where
 
 import Compiler.Parser.PreprocessorGrammar
 
@@ -12,7 +12,6 @@ import Compiler.Parser.TokenParsers
 import Compiler.Parser.Tokens
 import Compiler.SymbolTable (SymbolTable)
 import Compiler.SymbolTable qualified as SymTbl
-
 import Effectful
 import Effectful.Error.Static
 import Effectful.State.Static.Local
@@ -23,6 +22,8 @@ import Data.List qualified as L
 import Data.Map qualified as M
 
 import Data.Text qualified as T
+
+import Conduit
 
 import Data.Bits (And (getAnd))
 import Data.Text.IO qualified as TIO
@@ -35,23 +36,13 @@ data PPMode
     deriving stock (Show, Eq)
 
 data PreprocessorState = PreprocessorState
-    -- when an include is encountered the current alex state is pushed onto this stack
-    -- and a new one for the new file replaces the current AlexState.
-    -- When the current file is fully tokenized and processed we return to the last file
-    { lexStack :: [AlexState]
-    , -- The outstack is a buffer of tokens that is popped from
-      outQueue :: [PPToken]
-    , mode :: [PPMode]
-    , -- This queue holds the tokens before they go into the parser
-      buf :: S.Seq PPToken
-    , macroSymTbl :: M.Map T.Text MacroDef
-    , concatLookahead :: PPToken
+    { macroSymTbl :: M.Map T.Text MacroDef
     }
 
 newPreprocessorState :: PreprocessorState
-newPreprocessorState = PreprocessorState{lexStack = [], macroSymTbl = M.empty, mode = [], outQueue = [], buf = S.empty, concatLookahead = PPSpecial PPNewline}
+newPreprocessorState = PreprocessorState{macroSymTbl = M.empty}
 
-handleInclude :: (IOE :> es, State PreprocessorState :> es, Error String :> es, State AlexState :> es) => [PPToken] -> Eff es ()
+handleInclude :: (IOE :> es, State PreprocessorState :> es, Error String :> es, State AlexState :> es) => [PPToken] -> ConduitT i [PPToken] (Eff es) ()
 handleInclude toks = do
     -- TODO: properly concatenate tokens here
     -- TODO: properly resolve headers
@@ -60,138 +51,188 @@ handleInclude toks = do
             _ -> error "partially unimplemented: cannot resolve headers other than string literals"
 
     inp <- liftIO $ TIO.readFile (T.unpack file)
-    old_state <- get @AlexState
-    modify (\s@PreprocessorState{lexStack = ls} -> s{lexStack = old_state : ls})
-    put @AlexState $ newAlexState inp
+    -- save the old state
+    -- old_state <- lift $ get @AlexState
+    -- lift $ put @AlexState $ newAlexState inp
+    -- preprocessInner
+    -- lift $ put @AlexState $ old_state
+    
+    -- run everything through the pipeline again
+    alexConduitSource inp .| preprocessInner2
+    pure ()
 
--- skip to the next corresponding elif/else/endif
-skipIfBlock :: (IOE :> es, State PreprocessorState :> es, Error String :> es, State AlexState :> es) => Bool -> Eff es PPIfLine
-skipIfBlock skipToEnd = go 0
-  where
-    -- when skipToEnd is false, return at the next the next elif/else/endif
-    -- when skipToEnd is true, return at the next the next endif
-    go :: (State PreprocessorState :> es, State AlexState :> es, Error String :> es) => Int -> Eff es PPIfLine
-    go nesting =
-        do
-            getAndParseLine >>= \case
-                IfLine l -> case l of
-                    -- increase nesting when we enter a new block
-                    ILIf _toks -> go $ nesting + 1
-                    ILIfDef _ -> go $ nesting + 1
-                    ILIfNDef _ -> go $ nesting + 1
-                    ILElIf _ | nesting /= 0 -> go nesting -- ignore if it is nested
-                    ILElse | nesting /= 0 -> go nesting -- ignore nested
+isDefined :: (State PreprocessorState :> es) => Identifier -> Eff es Bool
+isDefined ident = (isJust . M.lookup ident . macroSymTbl) <$> get
 
-                    -- if skipToEnd is false and it is at the same level return it
-                    ILElIf _toks | not skipToEnd && nesting == 0 -> pure l
-                    ILElse | not skipToEnd && nesting == 0 -> pure l
-                    ILElse | skipToEnd && nesting == 0 -> go nesting
-                    ILEndIf | nesting /= 0 -> go (nesting - 1)
-                    ILEndIf | nesting == 0 -> pure l
-                    _ -> error "shit and die"
-                -- ignore non control flow lines
-                _ -> go nesting
+evalConditional :: (State PreprocessorState :> es) => [PPToken] -> Eff es Bool
+evalConditional toks = do
+    -- print a warning 
+    pure False
 
-handleIfLine :: (IOE :> es, State PreprocessorState :> es, Error String :> es, State AlexState :> es) => PPIfLine -> Eff es ()
-handleIfLine ifl = do
-    m <- mode <$> get
-    case ifl of
-        ILIf toks -> do
-            mst <- macroSymTbl <$> get
-            case expandTokenLine mst toks of
-                Left _err -> throwError "Failed to expand tokens"
-                Right expanded -> do
-                    error "#if is unimplemented"
-        -- error "#if is unimplemented"
-        ILIfDef ident ->
-            -- if the branch isnt taken skip to the next #elif or
-            maybeTakeBranch False . isJust . M.lookup ident . (\PreprocessorState{macroSymTbl = s} -> s) =<< get
-        ILIfNDef ident ->
-            maybeTakeBranch False . isNothing . M.lookup ident . (\PreprocessorState{macroSymTbl = s} -> s) =<< get
-        ILElIf _toks -> case m of
-            -- the previous branch was taken so skip to the end
-            InBranchMode : _ -> skipIfBlock True $> ()
-            -- previous branch was skipped, so check the conditional
-            SkipBranchMode : _t -> error "Taking #elif branches is unimplemented"
-            [] -> error "unexpected #elif"
-        -- elif can set the state to EndBranchMode when it ends
-        ILElse -> case m of
-            -- the parser has been in a branch so skip the else
-            InBranchMode : _ -> skipIfBlock True $> () -- skip the block
-            -- empty implies skippping so take the else
-            SkipBranchMode : t -> modify (\s -> s{mode = InBranchMode : t})
-            [] -> throwError "unexpected #else encountered"
-        ILEndIf -> case m of
-            _ : t -> modify (\s -> s{mode = t})
-            [] -> throwError "Unexpected #endif"
-  where
-    maybeTakeBranch shouldSkipToEnd b =
-        if b
-            then modify (\s -> s{mode = InBranchMode : mode s})
-            else
-                modify (\s -> s{mode = SkipBranchMode : mode s})
-                    >> skipIfBlock shouldSkipToEnd
-                    >>= handleIfLine
-                    >> pure ()
+-- decides whether to skip a 
+handleIfLine :: (State PreprocessorState :> es, Error String :> es) => PPIfLine -> ConduitT PPLine PPLine (Eff es) ()
+handleIfLine line = case line of 
+    (ILIf toks) -> lift (evalConditional toks) >>= shouldTakeBranch
+    (ILIfDef ident) -> lift (isDefined ident) >>= shouldTakeBranch
+    (ILIfNDef ident) ->  lift (isDefined ident) >>= shouldTakeBranch . not
+    _ -> pure () -- TODO : print warnings for the other cases
+    where
+        shouldTakeBranch x = if x then takeBranch else skipBranch
+        -- this can probably replace 
+        {- lineScanner 
+            :: (PPIfLine -> ConduitT PPLine PPLine (Eff es) ()) 
+            -> (PPIfLine -> ConduitT PPLine PPLine (Eff es) ()) 
+            -> ConduitT PPLine PPLine (Eff es) ()
+            -> (PPLine -> ConduitT PPLine PPLine (Eff es) ()) 
+            -> ConduitT PPLine PPLine (Eff es) ()
+        lineScanner newConditionalM elIfM elseM defaultM = await >>= maybe (pure ()) (\case
+            IfLine t@(ILIf _) -> newConditionalM t
+            IfLine t@(ILIfDef _) -> newConditionalM t
+            IfLine t@(ILIfNDef _) -> newConditionalM t
+            IfLine t@(ILElIf _) -> elIfM t
+            IfLine ILElse -> elseM
+            IfLine ILEndIf -> pure ()
+            l -> defaultM l) -}
 
--- I'm not sure if GHC will tail optimize this
-getPPTokenLine :: (Error String :> es, State AlexState :> es) => Eff es [PPToken]
-getPPTokenLine = do
-    tok <- alexMonadScan
-    case tok of
-        PPSpecial PPNewline -> pure []
-        PPEOF -> pure [tok]
-        _ -> fmap (tok :) getPPTokenLine
+        skipBranch :: (State PreprocessorState :> es, Error String :> es) => ConduitT PPLine PPLine (Eff es) ()
+        skipBranch = await >>= \case
+            Nothing -> pure () 
 
-getAndParseLine :: (Error String :> es, State AlexState :> es) => Eff es PPLine
-getAndParseLine =
-    getPPTokenLine >>= \case
-        [PPEOF] -> pure PPSEnd
-        other -> parseLine other
+            -- an inner conditional was found so ignore it
+            Just (IfLine t@(ILIf _)) -> finishBranch >> skipBranch
+            Just (IfLine t@(ILIfDef _)) -> finishBranch >> skipBranch
+            Just (IfLine t@(ILIfNDef _)) -> finishBranch >> skipBranch
+            Just (IfLine t@(ILElIf toks)) -> lift (evalConditional toks) >>= shouldTakeBranch
+            Just (IfLine t@(ILElse)) -> takeBranch -- take the else
+            Just (IfLine t@(ILEndIf)) -> pure () -- end of the conditional
+            Just _ -> skipBranch
 
-preprocessLine :: (IOE :> es, State PreprocessorState :> es, Error String :> es, State AlexState :> es) => PPLine -> Eff es [PPToken]
-preprocessLine line = case line of
-    TextLine line' -> pure line'
-    IfLine l -> handleIfLine l $> []
-    ControlLine (CLInclude toks) -> handleInclude toks $> []
-    ControlLine (CLDefineObj name val) -> do
-        s@PreprocessorState{macroSymTbl = mSymTbl} <- get
-        case M.lookup name mSymTbl of
-            Nothing -> put s{macroSymTbl = M.insert name (ObjectMacro val) mSymTbl}
-            -- TODO: This should not throw an error if the replacement lists are identical
-            Just _tbl -> throwError ("macro \"" ++ T.unpack name ++ "\" is already defined")
-        pure []
-    ControlLine (CLDefineFunc name args variadic val) -> do
-        s@PreprocessorState{macroSymTbl = mSymTbl} <- get
-        case M.lookup name mSymTbl of
-            Nothing -> put s{macroSymTbl = M.insert name (FuncMacro args variadic val) mSymTbl}
-            Just _tbl -> throwError ("macro \"" ++ T.unpack name ++ "\" is already defined")
-        pure []
-    ControlLine (CLUndef name) -> do
-        modify (\s -> s{macroSymTbl = M.delete name (macroSymTbl s)})
-        pure []
-    ControlLine (CLLine _) -> do
-        error "Line control is unimplemented"
-    ControlLine (CLError _) -> do
-        error "Compile errors are is unimplemented"
-    ControlLine (CLPragma _) -> do
-        error "Pragmas are is unimplemented"
-    ControlLine CLEmpty -> do
-        pure []
-    ControlLine CLParseError -> do
-        liftIO $ print ("Encountered a parse error while parsing a control line" :: T.Text)
-        pure []
-    NonDirective name -> do
-        liftIO . print $ "Encountered invalid directive \"" ++ T.unpack name ++ "\", ignoring"
-        pure []
-    PPSEnd -> do
-        s <- get
-        case lexStack s of
-            [] -> pure [PPEOF]
-            h : t -> do
-                put h
-                put (s{lexStack = t})
-                pure []
+        takeBranch :: (State PreprocessorState :> es, Error String :> es) => ConduitT PPLine PPLine (Eff es) ()
+        takeBranch = await >>= \case
+            Nothing -> pure () -- TODO: issue a warning about not having an ending for an #if 
+
+            -- start a new conditional
+            Just (IfLine t@(ILIf _)) -> handleIfLine t >> takeBranch
+            Just (IfLine t@(ILIfDef _)) -> handleIfLine t >> takeBranch
+            Just (IfLine t@(ILIfNDef _)) -> handleIfLine t >> takeBranch
+
+            Just (IfLine t@(ILElIf _)) -> finishBranch -- 
+            Just (IfLine t@(ILElse)) -> finishBranch
+            
+            Just (IfLine t@(ILEndIf)) -> pure () -- end of the conditional
+
+            Just line -> yield line >> takeBranch
+
+
+        -- skips the the EndIf
+        finishBranch :: (State PreprocessorState :> es, Error String :> es) => ConduitT PPLine PPLine (Eff es) ()
+        finishBranch = await >>= \case
+            Nothing -> pure () 
+
+            -- an inner conditional was found so ignore it
+            Just (IfLine t@(ILIf _)) -> finishBranch >> finishBranch
+            Just (IfLine t@(ILIfDef _)) -> finishBranch >> finishBranch
+            Just (IfLine t@(ILIfNDef _)) -> finishBranch >> finishBranch
+            Just (IfLine t@(ILElIf _)) -> finishBranch
+            Just (IfLine t@(ILElse)) -> finishBranch
+            Just (IfLine t@(ILEndIf)) -> pure () -- end of the conditional
+            Just line -> finishBranch
+
+
+
+
+-- takeIf :: (IOE :> es, State PreprocessorState :> es, Error String :> es, State AlexState :> es) => ConduitT PPLine PPLine (Eff es) PPLine
+
+--awaitOrStop :: Monad m => (i -> ConduitT i o m ()) -> ConduitT i o m ()
+--awaitOrStop action = await >>= maybe (pure ()) action
+
+
+handleControlLine :: (IOE :> es, State PreprocessorState :> es, Error String :> es, State AlexState :> es) => PPControlLine -> ConduitT PPLine [PPToken] (Eff es) ()
+handleControlLine (CLInclude toks) = handleInclude toks >> pure ()
+handleControlLine (CLDefineObj name val) = do
+    s@PreprocessorState{macroSymTbl = mSymTbl} <- lift get
+    case M.lookup name mSymTbl of
+        Nothing -> lift $ put s{macroSymTbl = M.insert name (ObjectMacro val) mSymTbl}
+        -- TODO: This should not throw an error if the replacement lists are identical
+        Just _tbl -> lift $ throwError ("macro \"" ++ T.unpack name ++ "\" is already defined")
+    pure ()
+handleControlLine (CLDefineFunc name args variadic val) = do
+    s@PreprocessorState{macroSymTbl = mSymTbl} <- lift get
+    case M.lookup name mSymTbl of
+        Nothing -> lift $ put s{macroSymTbl = M.insert name (FuncMacro args variadic val) mSymTbl}
+        Just _tbl -> lift $ throwError ("macro \"" ++ T.unpack name ++ "\" is already defined")
+    pure ()
+handleControlLine (CLUndef name) = do
+    lift $ modify (\s -> s{macroSymTbl = M.delete name (macroSymTbl s)})
+handleControlLine (CLLine _) = do
+    error "Line control is unimplemented"
+handleControlLine (CLError _) = do
+    error "Compile errors are is unimplemented"
+handleControlLine (CLPragma _) = do
+    error "Pragmas are unimplemented"
+handleControlLine CLEmpty = pure ()
+handleControlLine CLParseError = do
+    liftIO $ print ("Encountered a parse error while parsing a control line" :: T.Text)
+
+
+preprocessLines :: (IOE :> es, State PreprocessorState :> es, Error String :> es, State AlexState :> es) => ConduitT PPLine [PPToken] (Eff es) ()
+preprocessLines = awaitForever $ \case
+    TextLine line' -> yield line'
+    IfLine l -> handleIfLine l  .| preprocessLines
+    ControlLine l -> handleControlLine l
+    NonDirective name -> liftIO . print $ "Encountered invalid directive \"" ++ T.unpack name ++ "\", ignoring"
+    -- PPSEnd -> error ""
+
+
+preprocessInner2 :: (IOE :> es, Error String :> es, State PreprocessorState :> es, State AlexState :> es) => ConduitT PPToken [PPToken] (Eff es) ()
+preprocessInner2 = chunkLines  .| mapMC parseLine .| preprocessLines
+
+preprocess2 :: (IOE :> es, Error String :> es, State PreprocessorState :> es, State AlexState :> es) => ConduitT PPToken Token (Eff es) ()
+preprocess2 = preprocessInner2 .| mapMC expandTokenLineC .| mapC mergeStringLiterals .| concatC .| ppTokensToTokens convertIdent
+
+
+-- runPreprocessor' :: T.Text -> Eff (State SymbolTable ': State PreprocessorState ': es) a -> Eff es a
+-- runPreprocessor' inp = runAlex inp . evalState newPreprocessorState . evalState [M.empty]
+preprocessInner :: (IOE :> es, Error String :> es, State AlexState :> es, State PreprocessorState :> es) => ConduitT i [PPToken] (Eff es) ()
+preprocessInner = alexConduit .| chunkLines  .| mapMC parseLine .| preprocessLines
+
+preprocess :: (IOE :> es, Error String :> es, State AlexState :> es, State PreprocessorState :> es) => ConduitT i Token (Eff es) ()
+preprocess = preprocessInner .| mapMC expandTokenLineC .| mapC mergeStringLiterals .| concatC .| ppTokensToTokens convertIdent
+
+expandTokenLineC :: (Error String :> es, State PreprocessorState :> es) => [PPToken] -> Eff es [PPToken]
+expandTokenLineC inp = get >>= (`expandTokenLine` inp) . macroSymTbl 
+
+runPreprocessor :: (State AlexState :> es, Error String :> es) => Eff (State PreprocessorState ': es) a -> Eff es a
+runPreprocessor = evalState newPreprocessorState 
+
+-- .| concatC
+
+
+    
+    
+
+chunkLines :: (Error String :> es) => ConduitT PPToken [PPToken] (Eff es) ()
+chunkLines = loop []
+    where 
+        loop xs = await >>= \case
+            Nothing -> yield xs
+            Just (PPSpecial PPNewline) -> yield (reverse xs) >> loop []
+            Just x -> loop (x:xs)
+
+ppTokensToTokens :: (Error String :> es) => (Identifier -> Token) -> ConduitT PPToken Token (Eff es) ()
+ppTokensToTokens f = awaitForever $ \case
+    PPHeaderName _x -> lift $ throwError ""
+    PPOther _o -> lift $ throwError ""
+    PPNumber n -> case parseNumConstant n of
+      Left _err -> lift $ throwError "failed to parse num constant"
+      Right c -> yield (Constant c)
+    PPCharConst c -> yield (Constant $ CharConst c)
+    PPStringLiteral s -> yield (StringLiteral s) 
+    PPPunctuator punct -> yield (Punctuator punct) 
+    PPIdent ident -> yield (f ident) 
+    PPSpecial PPNewline -> pure ()
+    PPSpecial PPSLParen -> yield (Punctuator LParen)
+
 
 mergeStringLiterals :: [PPToken] -> [PPToken]
 mergeStringLiterals (PPStringLiteral s1 : PPStringLiteral s2 : t) = PPStringLiteral (T.append s1 s2) : mergeStringLiterals t
@@ -199,31 +240,13 @@ mergeStringLiterals (h : t) = h : mergeStringLiterals t
 mergeStringLiterals [] = []
 
 {-
-takeWhileState :: ((b, a) -> (b, Bool)) -> b -> [a] -> [a]
-takeWhileState _ _ [] = []
-takeWhileState f st (h : t) = case f (st, h) of
-    (newSt, True) -> h : takeWhileState f newSt t
-    (_, False) -> []
-
-stateUpdater :: (Int, PPToken) -> (Int, Bool)
-stateUpdater inp = case inp of
-    -- base cases
-    (0, PPPunctuator RParen) -> (0, False) -- reached end of function call
-    (0, PPPunctuator Comma) -> (0, False) -- reached comma, stop
-    -- handle nesting
-    (n, PPPunctuator LParen) -> (n + 1, True) -- increase nesting
-    (n, PPPunctuator RParen) -> (n - 1, True) -- decrease nesting
-    (n, _) -> (n, True)
--}
-
-{-
 expand each argument, then paste each into the stream and expand again
 -}
 
-expandTokenLine :: M.Map T.Text MacroDef -> [PPToken] -> Either () [PPToken {- :: (State AlexState :> es, Error String :> es, State PreprocessorState :> es) => Eff es () -}]
+expandTokenLine :: (Error String :> es) => M.Map T.Text MacroDef -> [PPToken] -> Eff es [PPToken {- :: (State AlexState :> es, Error String :> es, State PreprocessorState :> es) => Eff es () -}]
 expandTokenLine macros = fmap mergeStringLiterals . go []
   where
-    go acc [] = Right (reverse acc)
+    go acc [] = pure (reverse acc)
     go acc ((PPIdent ident) : t) = case M.lookup ident macros of
         Nothing -> go (PPIdent ident : acc) t
         Just (ObjectMacro replacementList) -> go (replacementList ++ acc) t
@@ -245,18 +268,18 @@ expandTokenLine macros = fmap mergeStringLiterals . go []
     getArg = getArg' 0 []
 
     -- splits the args
-    getFuncMacroArgs' :: [[PPToken]] -> [PPToken] -> Either () ([[PPToken]], [PPToken])
+    getFuncMacroArgs' :: (Error String :> es) => [[PPToken]] -> [PPToken] -> Eff es ([[PPToken]], [PPToken])
     getFuncMacroArgs' acc toks = case getArg False toks of
-        Left _ -> Left ()
+        Left _ -> throwError ""
         Right (True, arg, remToks) -> getFuncMacroArgs' (arg : acc) remToks
-        Right (False, arg, remToks) -> Right (reverse $ arg : acc, remToks)
+        Right (False, arg, remToks) -> pure (reverse $ arg : acc, remToks)
 
-    expandFuncMacro :: [Identifier] -> Bool -> [PPToken] -> [PPToken] -> Either () ([PPToken], [PPToken])
+    expandFuncMacro :: (Error String :> es) => [Identifier] -> Bool -> [PPToken] -> [PPToken] -> Eff es ([PPToken], [PPToken])
     expandFuncMacro argNames variadic replacementList toks = do
         toks' <- case toks of
-            PPSpecial PPSLParen : t -> Right t
-            PPPunctuator LParen : t -> Right t
-            _ -> Left ()
+            PPSpecial PPSLParen : t -> pure t
+            PPPunctuator LParen : t -> pure t
+            _ -> throwError ""
 
         (args, remToks) <- getFuncMacroArgs' [] toks'
         pairs <- zipArgs [] argNames args
@@ -264,51 +287,37 @@ expandTokenLine macros = fmap mergeStringLiterals . go []
         expandedReplacementList <- expandTokenLine newMacros replacementList
         pure (reverse expandedReplacementList, remToks)
       where
-        zipArgs :: [(Identifier, [PPToken])] -> [Identifier] -> [[PPToken]] -> Either () [(Identifier, [PPToken])]
+        zipArgs :: (Error String :> es) =>  [(Identifier, [PPToken])] -> [Identifier] -> [[PPToken]] -> Eff es [(Identifier, [PPToken])]
         zipArgs acc (hi : ti) (ha : ta) = zipArgs ((hi, ha) : acc) ti ta
         -- correct number of args
-        zipArgs acc [] [] | variadic = Right (("__VA_ARGS__", []) : acc)
-        zipArgs acc [] [] = Right acc
+        zipArgs acc [] [] | variadic = pure (("__VA_ARGS__", []) : acc)
+        zipArgs acc [] [] = pure acc
         -- extra args
-        zipArgs acc [] remArgs@(_ : _) | variadic = Right $ ("__VA_ARGS__", L.intercalate [PPPunctuator Comma] remArgs) : acc
-        zipArgs _ [] (_ : _) = Left ()
-        zipArgs _ _ [] = Left ()
+        zipArgs acc [] remArgs@(_ : _) | variadic = pure $ ("__VA_ARGS__", L.intercalate [PPPunctuator Comma] remArgs) : acc
+        zipArgs _ [] (_ : _) = throwError ""
+        zipArgs _ _ [] = throwError ""
 
 -- gets a token from the token queue and refills the queue if it is empty
-ppNextToken :: (IOE :> es, State PreprocessorState :> es, Error String :> es, State AlexState :> es, State SymbolTable :> es) => Eff es PPToken
-ppNextToken = do
-    s@PreprocessorState{outQueue = oq, macroSymTbl = mst, concatLookahead = lk} <- get @PreprocessorState
-    case oq of
-        -- pull a token from the outQueue
-        h : t -> put (s{outQueue = t, concatLookahead = h}) $> lk
-        -- end of input so stop
-        [] | lk == PPEOF -> pure PPEOF
-        -- get more
-        [] -> do
-            tokenLine <- getAndParseLine >>= preprocessLine
-            case expandTokenLine mst tokenLine of
-                Left () -> throwError "failed to expand tokens"
-                Right expanded -> do
-                    modify (\s' -> s'{outQueue = expanded})
-                    ppNextToken
+-- ppNextToken :: (IOE :> es, State PreprocessorState :> es, Error String :> es, State AlexState :> es) => Eff es PPToken
+-- ppNextToken = do
+--     s@PreprocessorState{outQueue = oq, macroSymTbl = mst, concatLookahead = lk} <- get @PreprocessorState
+--     case oq of
+--         -- pull a token from the outQueue
+--         h : t -> put (s{outQueue = t, concatLookahead = h}) $> lk
+--         -- end of input so stop
+--         [] | lk == PPEOF -> pure PPEOF
+--         -- get more
+--         [] -> do
+--             tokenLine <- getAndParseLine >>= preprocessLine
+--             case expandTokenLine mst tokenLine of
+--                 Left () -> throwError "failed to expand tokens"
+--                 Right expanded -> do
+--                     modify (\s' -> s'{outQueue = expanded})
+--                     ppNextToken
 
-runPreprocessor :: (State AlexState :> es, Error String :> es) => Eff (State SymbolTable ': State PreprocessorState ': es) a -> Eff es a
-runPreprocessor = evalState newPreprocessorState . evalState SymTbl.empty
 
--- runPreprocessor' :: T.Text -> Eff (State SymbolTable ': State PreprocessorState ': es) a -> Eff es a
--- runPreprocessor' inp = runAlex inp . evalState newPreprocessorState . evalState [M.empty]
-
-preprocess :: (IOE :> es, Error String :> es, State AlexState :> es, State PreprocessorState :> es, State SymbolTable :> es) => Eff es Token
-preprocess = do
-    nextToken <- ppNextToken
-    symTbl <- get
-    case ppTokenToToken (convertIdent symTbl) nextToken of
-        Left () -> throwError "something"
-        Right Nothing -> preprocess
-        Right (Just t) -> pure t
-
-convertIdent :: SymbolTable -> Identifier -> Token
-convertIdent symtbl ident = case ident of
+convertIdent :: Identifier -> Token
+convertIdent ident = case ident of
     "auto" -> Keyword TypeDef
     "break" -> Keyword Break
     "case" -> Keyword Case
@@ -345,39 +354,5 @@ convertIdent symtbl ident = case ident of
     "unsigned" -> Keyword TUnsigned
     "_Bool" -> Keyword TuBool
     "_Complex" -> Keyword TuComplex
-    i ->
-        if SymTbl.isType i symtbl
-            then TTypeName i
-            else Ident i
+    i -> Ident i
 
-ppTokenToToken :: (Identifier -> Token) -> PPToken -> Either () (Maybe Token)
-ppTokenToToken f tok =
-    case tok of
-        PPHeaderName _x -> Left ()
-        PPOther _o -> Left ()
-        PPNumber n ->
-            case parseNumConstant n of
-                Left _err -> Left () -- throwError "failed to parse num constant"
-                Right c -> Right . Just $ Constant c
-        PPCharConst c -> Right . Just $ Constant $ CharConst c
-        PPStringLiteral s -> Right . Just $ StringLiteral s
-        PPPunctuator punct -> Right . Just $ Punctuator punct
-        PPIdent ident -> Right . Just $ f ident
-        PPSpecial PPNewline -> Right Nothing
-        PPSpecial PPSLParen -> Right . Just $ Punctuator LParen
-        PPEOF -> Right . Just $ EOF
-
-printPPTokens :: (IOE :> es, State AlexState :> es, Error String :> es, State PreprocessorState :> es, State SymbolTable :> es) => Eff es ()
-printPPTokens = do
-    -- token <- preprocess
-    token <- ppNextToken
-    liftIO $ print token
-    case token of
-        -- EOF -> pure ()
-        PPEOF -> pure ()
-        _ -> printPPTokens
-
-{-
-runPreprocessor:: T.Text -> Eff (State AlexState ': Error String ': State SymbolTable ': es) a -> Eff es (Either (CallStack, String) a)
-runPreprocessor input__ = evalState [M.empty] . runError . evalState (AlexState alexStartPos input__ '\n' [] 0 Nothing)
--}
