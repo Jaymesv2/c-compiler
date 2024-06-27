@@ -16,7 +16,7 @@ import Effectful
 import Effectful.Error.Static
 import Effectful.State.Static.Local
 
-import Data.Sequence qualified as S
+-- import Data.Sequence qualified as S
 
 import Data.List qualified as L
 import Data.Map qualified as M

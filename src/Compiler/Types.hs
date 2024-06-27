@@ -111,6 +111,17 @@ newtype OrdinaryID = MkOrdinary Unique deriving stock (Eq, Show)
 newtype TagID = MkData Unique deriving stock (Eq, Show)
 
 
+
+
+data TypeClassification 
+    = Function
+    | Object
+    | Incomplete
+    deriving stock (Eq, Show)
+
+
+
+
 data StorageClassQualifier
     = Typedef
     | Extern
@@ -137,8 +148,8 @@ instance Monoid TypeQualifiers where
     mempty = emptyQualifier
 
 
+emptyQualifier, constTypeQualifier, restrictTypeQualifier, volatileTypeQualifier :: TypeQualifiers
 emptyQualifier = TypeQualifiers{constq = False, restrict = False, volatile = False}
-constTypeQualifier, restrictTypeQualifier, volatileTypeQualifier :: TypeQualifiers
 constTypeQualifier = emptyQualifier{constq = True}
 restrictTypeQualifier = emptyQualifier{restrict = True}
 volatileTypeQualifier = emptyQualifier{volatile = True}

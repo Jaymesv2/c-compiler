@@ -11,9 +11,9 @@ import Effectful.Error.Static
 import Effectful.State.Static.Local
 
 
-
-
 data DeclaratorParseError
+
+
 
 qualToQualifiers :: TypeQualifier -> TypeQualifiers
 qualToQualifiers TQConst =  constTypeQualifier
@@ -23,8 +23,8 @@ qualToQualifiers TQVolatile = volatileTypeQualifier
 foldQualfiers :: [TypeQualifier] -> TypeQualifiers
 foldQualfiers = foldMap qualToQualifiers
 
-parseFunctionDeclarator :: [DeclarationSpecifiers i] -> Declarator i -> Maybe [Declaration i] -> (i, CType, [(i, CType)], Bool)
-parseFunctionDeclarator = error ""
+parseFunctionDefinition :: [DeclarationSpecifiers i] -> Declarator i -> Maybe [Declaration i] -> Eff es (i, CType, [(i, CType)], Bool)
+parseFunctionDefinition = error ""
 
 
 parseTopLevelDeclaration :: Declaration i -> [(i, CType, Initializer i)]

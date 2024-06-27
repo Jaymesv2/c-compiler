@@ -1,8 +1,28 @@
+{-# LANGUAGE TemplateHaskell, DeriveGeneric #-}
 module Compiler.Parser.ParseTree where
 
 import Compiler.Parser.Tokens
 import Compiler.Types
 import Data.Text qualified as T
+
+import Data.Functor.Foldable.TH
+import Data.Functor.Foldable
+
+import GHC.Generics
+
+import Data.Fix
+
+{- import Data.Bifunctor
+
+data Attr f g a b 
+    = Attr 
+        { ast :: f a
+        , parseTree :: f b
+        } deriving stock (Eq, Show, Functor)
+
+instance (Functor f, Functor g) => Bifunctor (Attr f g) where
+    bimap f g Attr{ast=x,parseTree=y} = Attr (fmap f x) (fmap g y) -}
+
 
 -- page
 data UnaryOp = URef | UDeref | UCompliment | UNot | USizeof | UPreIncr | UPostIncr | UPreDecr | UPostDecr | UPlus | UMinus
@@ -29,8 +49,10 @@ data BinOp
     | BLogicalOr
     deriving stock (Eq, Show)
 
+
 data AssignmentOp = ATimesAssign | ADivAssign | AModAssign | APlusAssign | AMinusAssign | ALShiftAssign | ARShiftAssign | AAndAssign | AXorAssign | AOrAssign
     deriving stock (Eq, Show)
+
 
 data Expr i
     = EIdent i
@@ -50,7 +72,29 @@ data Expr i
     | SimpleAssignE (Expr i) (Expr i)
     | CompoundAssignE (Expr i) AssignmentOp (Expr i)
     | CommaE (Expr i) (Expr i)
+    deriving stock (Eq, Show) 
+
+
+{- data Expr f i
+    = EIdent i
+    | EConstant Constant
+    | EStringLiteral T.Text
+    | Bracketed f f
+    | Called f f
+    | DotE f Identifier
+    | ArrowE f Identifier
+    | UnaryE UnaryOp 
+    | InitE (TypeName i) [(Maybe [Designator i], Initializer i)]
+    | SizeofE f
+    | SizeofTypeE (TypeName i)
+    | CastE (TypeName i) f 
+    | BinaryOp f BinOp f
+    | ConditionalExpr f f f
+    | SimpleAssignE f f 
+    | CompoundAssignE f AssignmentOp f
+    | CommaE f f
     deriving stock (Eq, Show)
+-}
 
 -- must have at least one type specifier,
 -- page 97
@@ -111,8 +155,8 @@ data EnumSpecifier i
     | EnumRef Identifier
     deriving stock (Eq, Show)
 
-data Pointer = Pointer [TypeQualifier] (Maybe Pointer)
-    deriving stock (Eq, Show)
+-- data Pointer = Pointer [TypeQualifier] (Maybe Pointer)
+--     deriving stock (Eq, Show)
 
 data ParameterDeclaration i
     = ParameterDeclaration [DeclarationSpecifiers i] (Declarator i)

@@ -23,7 +23,6 @@ import Conduit
 %name expr Expr
 
 %monad {(IOE :> es, Error String :> es, State AlexState :> es, State SymbolTable :> es, State PreprocessorState :> es )}  {ConduitT Token Void (Eff es) } {>>=} {return}
---%lexer {lexer} {EOF}
 %lexer {(await >>=)} {Nothing}
 
 %errorhandlertype explist
@@ -404,15 +403,6 @@ EnumerationConstant :: { Identifier }
     : ident { $1 :: Identifier }
 
 -- Page 114
-{-
-Full Declarator: declarator not part of another declarator
-    Full Declarators can be terminated by a variable length array type
-
-
-- Array, function and pointer types are derived declarator types.
-
--}
-
 
 Declarator :: { Declarator Identifier }
     : Pointer DirectDeclarator      { ($1 DDPointer id) $2 }
@@ -517,55 +507,6 @@ Designator  :: { Designator Identifier }
     : '[' ConstExpr ']' { DesignatorExpr $2 }
     | '.' ident         { DesignatorDot $2  }
 
-{-
--- 131
-Statement :: { Statement Identifier }
-    : LabeledStatement      { $1 }
-    | CompoundStatement     { (CompoundStmt $1) }
-    | ExpressionStatement   { (ExpressionStmt $1) }
-    | SelectionStatement    { $1 }
-    | IterationStatement    { $1 }
-    | JumpStatement         { $1 }
-            
-LabeledStatement :: { Statement Identifier }
-    : ident ':' Statement           { (LabeledStmt $1 $3) }
-    | case Expr ':' Statement       { (CaseStmt $2 $4) }
-    | default ':' Statement         { (DefaultStmt $3) }
-
-CompoundStatement :: { [BlockItem  Identifier] }
-    : '{' BlockItemList '}' { (reverse $2) }
-    | '{' '}'               { [] }
-
-BlockItemList :: { [BlockItem Identifier] }
-    : BlockItem                 { [ $1 ] }
-    | BlockItemList BlockItem   {  ($2 : $1) }
-
-BlockItem :: { BlockItem Identifier }
-    : Declaration       { (BDecl $1) }
-    | Statement         { (BStmt $1) }
-
-ExpressionStatement :: { Maybe (Expr Identifier) }
-    : Expr  ';'     { (Just $1) }
-    | ';'           { Nothing }
-
-SelectionStatement  :: { Statement Identifier }
-    : if '(' Expr ')' Statement                 { IfStmt $3 $5 Nothing      }
-    | if '(' Expr ')' Statement else Statement  { IfStmt $3 $5 (Just $7)    }
-    | switch '(' Expr ')' Statement             { SwitchStmt $3 $5          }
-
-IterationStatement  :: { Statement Identifier }
-    : while '(' Expr ')' Statement          { WhileStmt $3 $5   }
-    | do Statement while '(' Expr ')' ';'   { DoStmt $2 $5      }
-                    -- lots of opts
-                    --| for '()'
-
-JumpStatement :: {Statement Identifier }
-    : goto ident ';'        { GotoStmt $2           }
-    | continue ';'          { ContinueStmt          }
-    | break ';'             { BreakStmt             }
-    | return ';'            { ReturnStmt Nothing    }
-    | return Expr ';'       { ReturnStmt (Just $2)  }
--}
 
 Statement :: { Statement Identifier }
     : ident ':' Statement           { LabeledStmt $1 $3 }
