@@ -3,6 +3,10 @@ module Compiler.Types where
 import Compiler.Parser
 import Compiler.Parser.Tokens ()
 import Data.Text.Internal.Fusion.Types (RS(RS0))
+
+import Data.Map qualified as M
+import Data.Set qualified as S
+
 import GHC.Exts
 
 {-
@@ -94,10 +98,17 @@ Abstract declarators only specify a type name, no identifiers.
 
 
 
+newtype UniqueGen = MkUniqueGen Int deriving stock (Eq, Show, Ord)
+
+newUniqueGen :: UniqueGen
+newUniqueGen = MkUniqueGen 0
 
 
 -- page 46
-newtype Unique = MkUnique Int deriving stock (Eq, Show)
+newtype Unique = MkUnique Int deriving stock (Eq, Show, Ord)
+
+nextUnique :: UniqueGen -> (Unique, UniqueGen)
+nextUnique (MkUniqueGen i) = (MkUnique i, MkUniqueGen (i+1))
 
 --instance Show Unique where
 
@@ -106,11 +117,26 @@ newtype Unique = MkUnique Int deriving stock (Eq, Show)
 
 --newtype MemberID = MkIdent Unique deriving stock (Eq, Show)
 
-newtype OrdinaryID = MkOrdinary Unique deriving stock (Eq, Show)
+newtype VariableID = MkVariable Unique deriving stock (Eq, Show, Ord)
 
-newtype TagID = MkData Unique deriving stock (Eq, Show)
+nextVariableID :: UniqueGen -> (VariableID, UniqueGen)
+nextVariableID (MkUniqueGen i) = (MkVariable . MkUnique $ i, MkUniqueGen (i+1))
+
+newtype TypeID = MkType Unique deriving stock (Eq, Show, Ord)
+
+nextTypeID :: UniqueGen -> (TypeID, UniqueGen)
+nextTypeID (MkUniqueGen i) = (MkType . MkUnique $ i, MkUniqueGen (i+1))
+
+newtype TagID = MkData Unique deriving stock (Eq, Show, Ord)
 
 
+
+
+
+data TypeMap =
+    TypeMap {
+        types :: M.Map TypeID CType
+    }
 
 
 data TypeClassification 
@@ -121,14 +147,13 @@ data TypeClassification
 
 
 
-
-data StorageClassQualifier
-    = Typedef
-    | Extern
-    | Static
-    | Auto
-    | Register
-    deriving stock (Eq, Show)
+-- -- typedef isn't a valid storage class in the type system
+-- data StorageClass
+--     = Extern
+--     | Static
+--     | Auto
+--     | Register
+--     deriving stock (Eq, Show)
 
 data TypeQualifiers = TypeQualifiers
     { constq :: Bool
@@ -154,8 +179,24 @@ constTypeQualifier = emptyQualifier{constq = True}
 restrictTypeQualifier = emptyQualifier{restrict = True}
 volatileTypeQualifier = emptyQualifier{volatile = True}
 
-data CPrimitive = CPrimitive
+
+
+
+
+
+data CPrimitive 
+    = CVoid
+    | CBool
+    | CChar         { sign :: Bool }
+    | CShortInt     { sign :: Bool }
+    | CInt          { sign :: Bool }
+    | CLongInt      { sign :: Bool }
+    | CLongLongInt  { sign :: Bool }
+    | CFloat        { complex :: Bool }
+    | CDouble       { complex :: Bool }
+    | CLongDouble   { complex :: Bool }
     deriving stock (Eq, Show)
+
 
 data CType
     = PrimTy CPrimitive
@@ -183,6 +224,10 @@ isComplete ty = error ""
 
 isIncomplete :: CType -> Bool
 isIncomplete = not . isComplete
+
+
+
+
 
 -- a non empty list of typedefs, struct/union/enum defs, identifier defs
 -- data SymbolTable = SymbolTable (NonEmpty (M.Map T.Text (), M.Map T.Text (), M.Map T.Text ()))

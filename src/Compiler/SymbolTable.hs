@@ -13,6 +13,8 @@ import Data.Text qualified as T
 import Effectful
 import Effectful.State.Static.Local
 
+{-
+
 -- data SymbolType
 --   = Type
 --   | Struct
@@ -69,6 +71,7 @@ data SymbolTable = SymbolTable
   { scope :: NonEmpty (M.Map T.Text (OrdinaryID, OrdinaryDef), S.Set OrdinaryID)
     -- map from unique ids to their values.
   , identifiers :: M.Map OrdinaryID OrdinaryDef
+  -- , types :: M.Map TypeID CType
   --, tags :: M.Map TagID ()
   -- , labels :: M.Map LabelID ()
   }
@@ -77,12 +80,7 @@ empty :: SymbolTable
 empty = SymbolTable { scope = (M.empty, S.empty):|[],  identifiers = M.empty }
 
 data OrdinaryDef 
-    = FunctionDef 
-        { name :: T.Text
-        , inline :: Bool
-        , currentDefinition :: Bool
-        }
-    | VariableDef 
+    = VariableDef 
         { name :: T.Text
         , varType :: CType
         --, storeageClass :: StorageClass
@@ -91,11 +89,16 @@ data OrdinaryDef
         { name :: T.Text
         , ty :: CType
         }
-    | EnumConst 
+    {- | EnumConst 
         { name :: T.Text
         , enumName :: TagID
         , value :: Int
         }
+    | FunctionDef 
+        { name :: T.Text
+        , inline :: Bool
+        , currentDefinition :: Bool
+        } -}
 
 -- enterFunctionScope :: (State SymbolTable :> es) => Eff es ()
 -- enterFunctionScope = error ""
@@ -121,3 +124,4 @@ isType ident (SymbolTable {scope = ((map,_):|_)}) = case M.lookup ident map of
 -- enterFunctionScope = error ""
 -- exitFunctionScope :: SymbolTable -> SymbolTable
 -- exitFunctionScope = error ""
+-}

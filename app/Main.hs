@@ -8,6 +8,8 @@ import Compiler.Parser.Lexer
 import Compiler.Parser.Preprocessor
 import Compiler.SymbolTable 
 
+import Compiler.Parser.GrammarHelpers
+
 import Data.Text.IO qualified as TIO
 import System.Environment
 
@@ -33,8 +35,8 @@ main = do
     -- _ <- runEff $ runAlex source $ runPreprocessor printPPTokens
     --
   --runEff (alexPrintCondTokens source)
-  --res <- runEff (evalState empty (runAlex source $ runPreprocessor $ runConduit (preprocess .| injectTypeNameTokens .| sinkList)))
-  res <- runEff (evalState empty (runAlex source $ runPreprocessor $ runConduit (preprocess .| injectTypeNameTokens .| clike)))
+  --res <- runEff (evalState newParserState (runAlex source $ runPreprocessor $ runConduit (preprocess .| injectTypeNameTokens .| sinkList)))
+  res <- runEff (evalState newParserState (runAlex source $ runPreprocessor $ runConduit (preprocess .| injectTypeNameTokens .| clike)))
   print res
 
   {-case res of

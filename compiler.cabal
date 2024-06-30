@@ -78,6 +78,11 @@ common shared
     ViewPatterns
     LinearTypes
 
+    NamedFieldPuns
+    RecordWildCards
+    OverloadedRecordDot
+    DuplicateRecordFields
+
   build-depends:
     , base          >=4.13.0.0 && <4.19.0.0.0
     , bytestring
@@ -94,6 +99,13 @@ common shared
     , effectful
     , effectful-core
     , effectful-plugin
+
+    , recursion-schemes
+    -- fun stuff
+    , selective
+    , validation-selective
+    , data-fix
+    -- , fastsum -- fastsum is marked as broken on nixpkgs :(
 
     --, happy
     --, happy  >= 1.20.1.1    

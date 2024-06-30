@@ -10,7 +10,6 @@ import Compiler.Parser.Lexer
 import Compiler.Parser.ParseTree (Expr)
 import Compiler.Parser.TokenParsers
 import Compiler.Parser.Tokens
-import Compiler.SymbolTable (SymbolTable)
 import Compiler.SymbolTable qualified as SymTbl
 import Effectful
 import Effectful.Error.Static

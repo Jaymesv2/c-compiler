@@ -7,7 +7,7 @@ import Compiler.Parser.Preprocessor (preprocess, PreprocessorState)
 
 import Compiler.Parser.ParseTree
 import Compiler.Parser.Tokens
-import Compiler.SymbolTable (SymbolTable, isType)
+--import Compiler.SymbolTable (SymbolTable, isType)
 import Compiler.Parser.GrammarHelpers
 import Data.Map qualified as M
 --data ParseError = ParseError
@@ -17,12 +17,12 @@ import Effectful.Error.Static
 import Effectful.State.Static.Local
 
 import Conduit
+import Data.Conduit
 }
 
 %name clike TranslationUnit
-%name expr Expr
 
-%monad {(IOE :> es, Error String :> es, State AlexState :> es, State SymbolTable :> es, State PreprocessorState :> es )}  {ConduitT Token Void (Eff es) } {>>=} {return}
+%monad {(IOE :> es, Error String :> es, State AlexState :> es, State ParserState :> es, State PreprocessorState :> es )}  {ConduitT Token Void (Eff es) } {>>=} {return}
 %lexer {(await >>=)} {Nothing}
 
 %errorhandlertype explist
@@ -31,7 +31,7 @@ import Conduit
 
 %token
     ident   { Just (Ident $$) }
-    typeName{ Just (TTypeName $$) }
+    typeName { Just (TTypeName $$) }
     stringlit { Just (StringLiteral $$) }
     constant  { Just (Constant $$) }
 
@@ -366,10 +366,10 @@ StructDeclaratorList :: { [StructDeclarator Identifier] }
 --SpecifierQualifierList  : SpecifierQualifierListI { (reverse $1) }
 
 SpecifierQualifierList :: { [SpecifierQualifier Identifier] }
-    : TypeSpecifier SpecifierQualifierList  { (Left $1) : $2    }
-    | TypeQualifier SpecifierQualifierList  { (Right $1) : $2   }
-    | TypeSpecifier                         { [ Left $1 ]       }
-    | TypeQualifier                         { [ Right $1 ]      }
+    : TypeSpecifier SpecifierQualifierList  { (Right $1) : $2    }
+    | TypeQualifier SpecifierQualifierList  { (Left $1) : $2   }
+    | TypeSpecifier                         { [ Right $1 ]       }
+    | TypeQualifier                         { [ Left $1 ]      }
 
 -- unfinished
 StructDeclarator :: { StructDeclarator Identifier }
@@ -411,7 +411,7 @@ Declarator :: { Declarator Identifier }
 
 DirectDeclarator :: { Declarator Identifier }
     : ident                                                             { DDIdent $1}
-    | '(' Declarator ')'                                               { $2              }
+    | '(' Declarator ')'                                                { $2              }
     -- array declarations
     | DirectDeclarator '[' TypeQualifierList AssignmentExpr ']'         { DDArr $1 False $3 (Just $4) False }
     | DirectDeclarator '[' TypeQualifierList '*' ']'                    { DDArr $1 False $3 Nothing   True  }       
@@ -497,11 +497,11 @@ InitializerList :: { [(Maybe [Designator Identifier], Initializer Identifier)] }
     | InitializerList ',' Initializer               { (Nothing, $3) : $1    }
 
 Designation :: { [Designator Identifier] }
-    : DesignatorList '='    { reverse $1}
+    : DesignatorList '='    { reverse $1 }
 
 DesignatorList :: {[Designator Identifier] }
-    : Designator                    { [ $1 ]        }
-    | DesignatorList Designator    { $2 : $1       }
+    : Designator                    { [ $1 ] }
+    | DesignatorList Designator     { $2 : $1 }
 
 Designator  :: { Designator Identifier }
     : '[' ConstExpr ']' { DesignatorExpr $2 }
@@ -509,34 +509,43 @@ Designator  :: { Designator Identifier }
 
 
 Statement :: { Statement Identifier }
-    : ident ':' Statement           { LabeledStmt $1 $3 }
-    | case Expr ':' Statement       { CaseStmt $2 $4 }
-    | default ':' Statement         { DefaultStmt $3 }
-    | CompoundStatement     { CompoundStmt $1 }
+    : ident ':' Statement                       { LabeledStmt $1 $3 }
+    | case Expr ':' Statement                   { CaseStmt $2 $4 }
+    | default ':' Statement                     { DefaultStmt $3 }
+    | CompoundStatement                         { CompoundStmt $1 }
     | if '(' Expr ')' Statement                 { IfStmt $3 $5 Nothing      }
     | if '(' Expr ')' Statement else Statement  { IfStmt $3 $5 (Just $7)    }
     | switch '(' Expr ')' Statement             { SwitchStmt $3 $5          }
 
-    | while '(' Expr ')' Statement          { WhileStmt $3 $5   }
-    | do Statement while '(' Expr ')' ';'   { DoStmt $2 $5      }
-    -- | for '()'
+    | while '(' Expr ')' Statement              { WhileStmt $3 $5   }
+    | do Statement while '(' Expr ')' ';'       { DoStmt $2 $5      }
     -- lots of opts
-    | goto ident ';'        { GotoStmt $2           }
-    | continue ';'          { ContinueStmt          }
-    | break ';'             { BreakStmt             }
-    | return ';'            { ReturnStmt Nothing    }
-    | return Expr ';'       { ReturnStmt (Just $2)  }
+    | goto ident ';'                            { GotoStmt $2           }
+    | continue ';'                              { ContinueStmt          }
+    | break ';'                                 { BreakStmt             }
+    | return ';'                                { ReturnStmt Nothing    }
+    | return Expr ';'                           { ReturnStmt (Just $2)  }
 
-    | Expr  ';'     { ExpressionStmt (Just $1) }
-    | ';'           { ExpressionStmt Nothing   }
-        --ExpressionStatement   { (ExpressionStmt $1) }
+    | Expr  ';'                                 { ExpressionStmt (Just $1) }
+    | ';'                                       { ExpressionStmt Nothing   }
+        --ExpressionStatement                   { (ExpressionStmt $1) }
 
+LBrace :: { () }
+    : '{'           {% lift (enterScope ) }
+
+RBrace :: { () }
+    : '}'           {% lift (exitScope) }
 
 CompoundStatement :: { CompoundStatement Identifier }
-    : '{' BlockItemList '}' { CompoundStatement (reverse $2) }
+    : LBrace BlockItemList RBrace { CompoundStatement (reverse $2) }
+
+
 
 BlockItemList :: { [BlockItem Identifier] }
-    : BlockItemList Declaration {  (BDecl $2 : $1) }
+    : BlockItemList Declaration {%  lift (do 
+        _ <- parseDeclaration $2
+        pure (BDecl $2 : $1)) }
+
     | BlockItemList Statement   {  (BStmt $2 : $1) }
     |                           { [] }
 
@@ -550,8 +559,10 @@ FunctionDefinition :: { FunctionDefinition Identifier }
     : DeclarationSpecifiers Declarator DeclarationList CompoundStatement    {FunctionDefinition $1 $2 (Just $ reverse $3) $4 }
 
 ExternalDeclaration :: { ExternDecl Identifier }
-    : FunctionDefinition    {FunctionDef $1   }
-    | Declaration           {EDecl $1         }
+    : FunctionDefinition    { EFunctionDef $1   }
+    | Declaration           {%  lift (do 
+        _ <- parseDeclaration $1
+        pure (EDecl $1)  )        }
 
 TranslationUnit :: { [ExternDecl Identifier] }
     : TranslationUnitI   { reverse $1 }
@@ -570,19 +581,15 @@ TranslationUnitI :: { [ExternDecl Identifier] }
 
 
 --parseError :: Error String :> es => (Token, [String]) -> Eff es a
-parseError :: (Error String :> es, State AlexState :> es, State SymbolTable :> es) => (Maybe Token, [String]) -> ConduitT Token Void (Eff es) a
+parseError :: (Error String :> es, State AlexState :> es, State ParserState :> es) => (Maybe Token, [String]) -> ConduitT Token Void (Eff es) a
 parseError (t, tokens) = lift $ error $ "something failed :(, failed on token: \"" ++  show t ++ "\"possible tokens: " ++ show tokens  
 
-injectTypeNameTokens :: (State SymbolTable :> es) => ConduitT Token Token (Eff es) ()
-injectTypeNameTokens = await >>= \case
-    Just (Ident i) -> do
-        tbl <- lift get
-        yield $ if isType i tbl
-            then TTypeName i
-            else Ident i
-        injectTypeNameTokens
-    Just x -> yield x >> injectTypeNameTokens
-    Nothing -> pure ()
+injectTypeNameTokens :: (IOE :> es, State ParserState :> es) => ConduitT Token Token (Eff es) ()
+injectTypeNameTokens = mapMC $ \case
+    Ident i -> isType i >>= \case
+        True -> (liftIO (print "type name")) >> (pure $ TTypeName i )
+        False -> pure $ Ident i 
+    x -> pure x 
 
 
 }
