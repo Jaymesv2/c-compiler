@@ -1,16 +1,13 @@
 {
 {-# LANGUAGE NoMonomorphismRestriction #-}
-module Compiler.Parser.Grammar(clike, injectTypeNameTokens) where
+module Compiler.Parser.Grammar(clike, injectTypeNameTokens, ParserScope, newParserScope) where
 
 import Compiler.Parser.Lexer (AlexState)
 import Compiler.Parser.Preprocessor (preprocess, PreprocessorState)
 
 import Compiler.Parser.ParseTree
 import Compiler.Parser.Tokens
---import Compiler.SymbolTable (SymbolTable, isType)
-import Compiler.Parser.GrammarHelpers
-import Data.Map qualified as M
---data ParseError = ParseError
+-- import Compiler.Parser.GrammarHelpers
 
 import Effectful
 import Effectful.Error.Static
@@ -18,11 +15,18 @@ import Effectful.State.Static.Local
 
 import Conduit
 import Data.Conduit
+
+import Data.Map qualified as M
+import Data.Set qualified as S
+import Data.List.NonEmpty qualified as N
+import Data.List.NonEmpty (NonEmpty (..))
+import Data.Foldable
+import Control.Monad
 }
 
 %name clike TranslationUnit
 
-%monad {(IOE :> es, Error String :> es, State AlexState :> es, State ParserState :> es, State PreprocessorState :> es )}  {ConduitT Token Void (Eff es) } {>>=} {return}
+%monad {(IOE :> es, State ParserScope :> es, Error String :> es, State AlexState :> es, State PreprocessorState :> es )}  {ConduitT Token Void (Eff es) } {>>=} {return}
 %lexer {(await >>=)} {Nothing}
 
 %errorhandlertype explist
@@ -329,6 +333,7 @@ TypeQualifier :: { TypeQualifier }
 -- page 112
 FunctionSpecifier :: { FunctionSpecifier }
     : inline    { FSInline }
+
 -- page 101
 -- might merge these two rules into 1 with 6 rules
 StructOrUnionSpecifier :: { DataLayoutSpec Identifier }
@@ -531,10 +536,10 @@ Statement :: { Statement Identifier }
         --ExpressionStatement                   { (ExpressionStmt $1) }
 
 LBrace :: { () }
-    : '{'           {% lift (enterScope ) }
+    : '{'           {% enterScope }
 
 RBrace :: { () }
-    : '}'           {% lift (exitScope) }
+    : '}'           {% exitScope }
 
 CompoundStatement :: { CompoundStatement Identifier }
     : LBrace BlockItemList RBrace { CompoundStatement (reverse $2) }
@@ -542,9 +547,19 @@ CompoundStatement :: { CompoundStatement Identifier }
 
 
 BlockItemList :: { [BlockItem Identifier] }
-    : BlockItemList Declaration {%  lift (do 
-        _ <- parseDeclaration $2
-        pure (BDecl $2 : $1)) }
+        -- In some cases the lookahead token may be an (Ident i) where i is the identifier being
+        -- declared in the preceeding declaration.
+        -- In this case the lookahead needs to be replaced with a (TypeName i) token.
+    : BlockItemList Declaration {%% 
+        (\lookahead -> do 
+            decl <- fmap ((:$1) . BDecl) (handleDeclaration $2)
+            case lookahead of
+                Just i@(Ident _) ->  do
+                    tok <- lift (checkToken i)
+                    leftover tok
+                Just x -> leftover x
+                Nothing -> pure ()
+            pure decl ) }
 
     | BlockItemList Statement   {  (BStmt $2 : $1) }
     |                           { [] }
@@ -559,10 +574,18 @@ FunctionDefinition :: { FunctionDefinition Identifier }
     : DeclarationSpecifiers Declarator DeclarationList CompoundStatement    {FunctionDefinition $1 $2 (Just $ reverse $3) $4 }
 
 ExternalDeclaration :: { ExternDecl Identifier }
-    : FunctionDefinition    { EFunctionDef $1   }
-    | Declaration           {%  lift (do 
-        _ <- parseDeclaration $1
-        pure (EDecl $1)  )        }
+    : FunctionDefinition    { EFunctionDef $1 }
+    | Declaration           {%%
+        (\lookahead -> do 
+            decl <- fmap EDecl (handleDeclaration ($1))
+            case lookahead of
+                Just i@(Ident _) ->  do
+                    tok <- lift (checkToken i)
+                    leftover tok
+                Just x -> leftover x
+                Nothing -> pure ()
+            pure decl ) }
+
 
 TranslationUnit :: { [ExternDecl Identifier] }
     : TranslationUnitI   { reverse $1 }
@@ -574,32 +597,75 @@ TranslationUnitI :: { [ExternDecl Identifier] }
 -- page 145
 -- PREPROCESSING
 
---
-
 
 {
 
+type ParserScope = N.NonEmpty (S.Set Identifier)
 
---parseError :: Error String :> es => (Token, [String]) -> Eff es a
-parseError :: (Error String :> es, State AlexState :> es, State ParserState :> es) => (Maybe Token, [String]) -> ConduitT Token Void (Eff es) a
+newParserScope = S.empty:|[]
+
+enterScope :: (State ParserScope :> es) => ConduitT i o (Eff es) ()
+enterScope = lift $ modify (\(h:|t) -> h:|(h:t))
+
+exitScope :: (State ParserScope :> es) => ConduitT i o (Eff es) ()
+exitScope = lift $ modify (\case
+    _:|(h:t) -> h:|t
+    h:|[] -> h:|[])
+
+
+getDeclaredIdent :: Declarator i -> i
+getDeclaredIdent (DDIdent i) = i
+getDeclaredIdent (DDPointer _ inner) = getDeclaredIdent inner
+getDeclaredIdent (DDArr inner _ _ _ _) = getDeclaredIdent inner
+getDeclaredIdent (DDFuncPList inner _) = getDeclaredIdent inner
+getDeclaredIdent (DDFuncIList inner _) = getDeclaredIdent inner
+
+containsTypeDef :: [DeclarationSpecifiers Identifier] -> Bool
+containsTypeDef = any $ \case 
+    DSStorageSpec (SCTypedef) -> True
+    _ -> False
+
+handleDeclaration :: (IOE :> es, State ParserScope :> es) => Declaration Identifier -> ConduitT i o (Eff es) (Declaration Identifier)
+handleDeclaration d@(Declaration specs initDeclarators) = do
+    lift 
+        $ when (containsTypeDef specs) 
+        $ modify
+            (\(h:|t) -> (foldl' (flip S.insert) h $ map (\(InitDeclaration i _) -> getDeclaredIdent i) initDeclarators):|t)
+    lift $ (get >>= \x -> liftIO (print x))
+    pure d
+
+
+parseError :: (Error String :> es, State ParserScope :> es) => (Maybe Token, [String]) -> ConduitT Token Void (Eff es) a
 parseError (t, tokens) = lift $ error $ "something failed :(, failed on token: \"" ++  show t ++ "\"possible tokens: " ++ show tokens  
 
-injectTypeNameTokens :: (IOE :> es, State ParserState :> es) => ConduitT Token Token (Eff es) ()
-injectTypeNameTokens = mapMC $ \case
-    Ident i -> isType i >>= \case
-        True -> (liftIO (print "type name")) >> (pure $ TTypeName i )
-        False -> pure $ Ident i 
-    x -> pure x 
 
+checkToken :: (State ParserScope :> es) => Token -> Eff es Token
+checkToken (Ident i) = do
+        h:|_ <- get
+        pure $ case S.member i h of
+            True -> TTypeName i
+            False -> Ident i
+checkToken x = pure x 
 
+injectTypeNameTokens :: (State ParserScope :> es) => ConduitT Token Token (Eff es) ()
+injectTypeNameTokens = mapMC $ checkToken
 }
 
+-- --parseError :: Error String :> es => (Token, [String]) -> Eff es a
+-- 
+-- parseError :: (Error String :> es, State AlexState :> es, State ParserState :> es) => (Maybe Token, [String]) -> ConduitT Token Void (Eff es) a
+-- parseError (t, tokens) = lift $ error $ "something failed :(, failed on token: \"" ++  show t ++ "\"possible tokens: " ++ show tokens  
+-- 
+-- injectTypeNameTokens :: (IOE :> es, State ParserState :> es) => ConduitT Token Token (Eff es) ()
+-- injectTypeNameTokens = mapMC $ \case
+--     Ident i -> isType i >>= \case
+--         True -> (liftIO (print "type name")) >> (pure $ TTypeName i )
+--         False -> pure $ Ident i 
+--     x -> pure x 
+
 -- data PCtx = PCtx
---
 -- data ParserContext :: Effect
---
 -- type instance DispatchOf ParserContext = Static NoSideEffects
---
 -- newtype instance StaticRep ParserContext = ParserContext PCtx
 --
 --

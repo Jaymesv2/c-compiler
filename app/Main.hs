@@ -8,7 +8,7 @@ import Compiler.Parser.Lexer
 import Compiler.Parser.Preprocessor
 import Compiler.SymbolTable 
 
-import Compiler.Parser.GrammarHelpers
+--import Compiler.Parser.GrammarHelpers
 
 import Data.Text.IO qualified as TIO
 import System.Environment
@@ -36,7 +36,7 @@ main = do
     --
   --runEff (alexPrintCondTokens source)
   --res <- runEff (evalState newParserState (runAlex source $ runPreprocessor $ runConduit (preprocess .| injectTypeNameTokens .| sinkList)))
-  res <- runEff (evalState newParserState (runAlex source $ runPreprocessor $ runConduit (preprocess .| injectTypeNameTokens .| clike)))
+  res <- runEff (evalState newParserScope (runAlex source $ runPreprocessor $ runConduit (preprocess .| injectTypeNameTokens .| clike)))
   print res
 
   {-case res of
