@@ -139,11 +139,11 @@ tokens :-
 <0>  "//" { begin linecomment }
 <0>  "/*" { begin blockcomment }
 
--- <linecomment> [^\n]+ ;  -- match non linebreaks
--- <linecomment> \n { begin 0 } -- switch back to code
-<linecomment> [^\n]+ { begin 0 }  -- match non linebreaks
+<linecomment> [^\n]* { begin 0 }  -- match non linebreaks
 
+<blockcomment> \n; -- match newlines in block comments
 <blockcomment> [^\*]+; -- match everything other than *
+<blockcomment> "*" \n; -- match * not followed by /
 <blockcomment> "*" [^\/]; -- match * not followed by /
 <blockcomment> "*/" { begin 0 } -- match */
 
