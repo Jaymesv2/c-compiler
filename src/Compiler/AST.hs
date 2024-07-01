@@ -13,12 +13,3 @@ Translations Phases:
 8. link time :)
 -}
 
-{-
-    classes of declarations (dependency order):
-    1. typedefs
-    2. structs/enums
-    3. globals
-    1. function declarations
-    3. globals
-
--}

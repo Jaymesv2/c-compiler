@@ -72,7 +72,14 @@ instance (Monoid w, Semigroup e) => Applicative (Validation w e) where
     Fail{err=e1,warnings=w1} <|> Fail{err=e2,warnings=w2} = Fail{err=e1<>e2, warnings=w1<>w2} -}
 
 
-
+data ValidationReader r w e a
+    = OkR 
+        { val :: a
+        , warnings :: w
+        , env :: r }
+    | FailR
+        { err :: e
+        , warnings :: w }
 
 
 
@@ -103,7 +110,6 @@ data Ordinaries
     | TypeAlias TypeID
     | FunctionID FunctionID 
         deriving stock (Eq,Show, Ord)
- 
 
 getVariableID :: Ordinaries -> Maybe VariableID
 getVariableID (Variable v) = Just v
@@ -135,15 +141,15 @@ data ParserState
     = ParserState 
         { 
           -- scope stuff  
-          ordinaryScope :: NonEmpty BlockScope
+          ordinaryScope :: !(NonEmpty BlockScope)
         -- , functionScope :: Maybe (Map Text LabelID)
-        , variableDefs :: Map VariableID (Text, VariableDef)
-        , functionDefs :: Map FunctionID (Text, FunctionDef)
-        , typeDefs :: Map TypeID (Text, CType)
+        , variableDefs :: !(Map VariableID (Text, VariableDef))
+        , functionDefs :: !(Map FunctionID (Text, FunctionDef))
+        , typeDefs :: !(Map TypeID (Text, CType))
 
-        , variableIdGen :: UniqueGen
-        , functionIdGen :: UniqueGen
-        , typeIdGen :: UniqueGen
+        , variableIdGen :: !UniqueGen
+        , functionIdGen :: !UniqueGen
+        , typeIdGen :: !UniqueGen
         } deriving stock (Eq, Show)
 
 
@@ -170,16 +176,12 @@ emptyBlockScope = BlockScope M.empty Set.empty
 
 
 enterScope :: (State ParserState :> es, IOE :> es) => Eff es ()
-enterScope = do 
-    s@ParserState{ordinaryScope=(h:|t)} <- get
-    liftIO (print $ "entering scope level" ++ show (1 + L.length t))
-    modify (\s@ParserState{ordinaryScope=(h:|t)} -> s{ordinaryScope=emptyBlockScope:|(h:t)})
+enterScope = modify (\s@ParserState{ordinaryScope=(h:|t)} -> s{ordinaryScope=emptyBlockScope:|(h:t)})
 
 
 exitScope :: (IOE :> es, State ParserState :> es, Error String :> es) => Eff es ()
 exitScope = do
     s@ParserState{ordinaryScope=(h:|t)} <- get
-    liftIO (print $ "exiting scope level" ++ show (L.length t))
     case t of 
         [] -> throwError "cannot exit scope"
         (x:xs) -> put s{ordinaryScope=x:|xs}
@@ -187,11 +189,7 @@ exitScope = do
 --exitScope :: (State ParserState :> es) => Eff es (Set.)
 
 isType :: (State ParserState :> es) => Text -> Eff es Bool
--- isType name = isJust . M.lookup name . allOrdinaries . N.head . ordinaryScope <$> get
 isType name = isJust . (getTypeAliasID <=< M.lookup name . allOrdinaries . N.head . ordinaryScope) <$> get
-    
-   
-    
     
 
 -- name and value
@@ -221,44 +219,19 @@ defineTypeAlias name val = do
         Nothing -> pure ()
 
     let (newId, typeIdGen') = nextTypeID typeIdGen
+
     put s{
         ordinaryScope=BlockScope{allOrdinaries=M.insert name (TypeAlias newId) allOrdinaries, definedInScope=Set.insert (TypeAlias newId) definedInScope}:|t, 
         typeIdGen=typeIdGen', 
         typeDefs=M.insert newId (name, val) typeDefs
     }
+
     pure newId
 
 
 
-declAlgDummy :: (State ParserState :> es, Error String :> es) => DeclaratorF i (Eff es (i, CType -> CType)) -> Eff es (i, CType -> CType)
-declAlgDummy (DDIdentF i) = pure (i, id)
-declAlgDummy (DDPointerF quals inner) = inner 
-declAlgDummy (DDArrF inner isStatic quals size _) = inner
-declAlgDummy (DDFuncPListF inner params) = inner
-declAlgDummy (DDFuncIListF inner idents) =  inner
 
 
-
-declAlg :: (State ParserState :> es, Error String :> es) => DeclaratorF i (Eff es (i, CType -> CType)) -> Eff es (i, CType -> CType)
-declAlg (DDIdentF i) = pure (i, id)
-declAlg (DDPointerF quals inner) = inner <&> \(i,ic) -> (i, PointerTy (foldQualifiers quals) . ic )
-declAlg (DDArrF inner isStatic quals size _) = throwError "havent implemented arr declarators yet"
--- inner <&> \(i,ic) -> (i,ic)
-declAlg (DDFuncPListF inner params) = do
-    (i,ic) <- inner
-    throwError "fuck"
-    {- params <- mapM (cata declAlg) params
-    pure $ (i, \c ->  FuncTy (CFunc (ic c) params False))  -}
-
-declAlg (DDFuncIListF inner idents) =  throwError "cannot have an identifier list in a declarator"
-
-
-absDeclAlg :: (Error String :> es) => AbstractDeclaratorF i (AbstractDeclarator i, Eff es (CType -> CType)) -> Eff es (CType -> CType)
-absDeclAlg (ADPtrF quals Nothing) = pure $ PointerTy (foldQualifiers quals)
-absDeclAlg (ADPtrF quals (Just (_, inner))) = inner <&> \ic -> PointerTy (foldQualifiers quals) . ic 
-absDeclAlg (ArrayF _ _) = error ""
-absDeclAlg (VarArrayF _) = error ""
-absDeclAlg (ParensF _ _) = error ""
 
 qualToQualifiers :: TypeQualifier -> TypeQualifiers
 qualToQualifiers TQConst =  constTypeQualifier
@@ -420,56 +393,66 @@ parseDeclaration (Declaration specifiers initDecls) = do
                         --pure (oid, c tspc, init') 
                     ) initDecls $> []
 
-
-{- parseInitDeclaration :: (Error String :> es) => InitDeclaration i -> Eff es (i, CType -> CType, Maybe (Initializer i))
-parseInitDeclaration (InitDeclaration decl init') = do
-    (i,c) <- parseDeclarator decl
-    pure (i, c, init') -}
-
 parseDeclarator :: (Error String :> es, State ParserState :> es) => Declarator i -> Eff es (i, CType -> CType)
 parseDeclarator = cata declAlg
 
 
+declAlg :: (State ParserState :> es, Error String :> es) => DeclaratorF i (Eff es (i, CType -> CType)) -> Eff es (i, CType -> CType)
+declAlg (DDIdentF i) = pure (i, id)
+declAlg (DDPointerF quals inner) = inner <&> \(i,ic) -> (i, PointerTy (foldQualifiers quals) . ic )
+declAlg (DDArrF inner isStatic quals size _) = throwError "havent implemented arr declarators yet"
+-- inner <&> \(i,ic) -> (i,ic)
+declAlg (DDFuncPListF inner params) = do
+    (i,ic) <- inner
+    params' <- parseParamDecls params
+    let params'' = map snd params'
+    pure (i, \c ->  FuncTy (CFunc (ic c) params'' False)) 
+
+declAlg (DDFuncIListF _ _) =  throwError "cannot have an identifier list in a declarator"
 
 
---parseDataLayoutSpec :: DataLayoutSpec i -> Either DeclaratorParseError CType
---parseDataLayoutSpec d = case 
+parseParamDecls :: (State ParserState :> es, Error String :> es) => [ParameterDeclaration i] -> Eff es [(Maybe i, CType)]
+parseParamDecls = mapM parseParamDecl
+
+parseParamDecl :: (State ParserState :> es, Error String :> es) => ParameterDeclaration i -> Eff es (Maybe i, CType)
+parseParamDecl (ParameterDeclaration specquals decl) = do
+    -- storage class is ignored if the params aren't in a function
+    (_, typeSpcs, quals, funcSpec) <- extractDeclSpecifiers specquals
+    tspc <- parseTypeSpecifiers typeSpcs
+    (i,cfn) <- cata declAlg decl
+    typ <- case cfn tspc of
+        ArrayTy inner _ -> do
+            pure $ PointerTy quals inner -- array parameters are adjusted to be pointers 
+        x -> pure x
+    
+    pure (Just i, typ)
+parseParamDecl (AbsParameterDeclaration specquals (Just absdecl)) = do 
+    -- storage class is ignored if the params aren't in a function
+    (_, typeSpcs, quals, funcSpec) <- extractDeclSpecifiers specquals
+    tspc <- parseTypeSpecifiers typeSpcs
+
+    cfn <- para absDeclAlg absdecl
+
+    typ <- case cfn tspc of
+        ArrayTy inner _ -> do
+            pure $ PointerTy quals inner -- array parameters are adjusted to be pointers 
+        x -> pure x
+    
+    pure (Nothing, typ)
+parseParamDecl (AbsParameterDeclaration specquals Nothing) = do
+    -- storage class is ignored if the params aren't in a function
+    (_, typeSpcs, quals, funcSpec) <- extractDeclSpecifiers specquals
+    tspc <- parseTypeSpecifiers typeSpcs
+    pure (Nothing, tspc)
+parseParamDecl VariadicDeclaration = error ""
 
 
 
-
--- parseInnerDeclarator :: (Error String :> es) => Declarator i -> CType -> Eff es (i, CType)
--- parseInnerDeclarator (DDIdent i) ty = pure (i, ty)
--- parseInnerDeclarator (DDPointer quals inner) ty = parseInnerDeclarator inner ty >>= (\(i, ty') -> pure (i, PointerTy (foldMap qualToQualifiers quals) ty'))
---
--- parseInnerDeclarator (DDArr inner isStatic quals size isUnsized) ty = 
---     parseInnerDeclarator inner ty >>= (\(i, ty') -> pure (i, ArrayTy ty' (error "havent added const exprs yet")))
---
--- parseInnerDeclarator (DDFuncPList inner' params) ty = error ""
---
--- -- identifier lists aren't allowed
--- parseInnerDeclarator (DDFuncIList inner params) ty =  (throwError "Identifier lists are not permitted in inner declarators")
---
---
---
---
--- parseAbstractDeclarator :: (Error String :> es) => AbstractDeclarator i -> CType -> Eff es CType
--- -- ADPtr [TypeQualifier] (Maybe (AbstractDeclarator i))
--- parseAbstractDeclarator (ADPtr quals inner) = \c -> PointerTy (foldMap qualToQualifiers quals) <$> maybe (pure c) (`parseAbstractDeclarator` c) inner
--- -- Array (Maybe (AbstractDeclarator i)) (Maybe (Expr i))
--- parseAbstractDeclarator (Array (Just inner) size) =  error ""
--- parseAbstractDeclarator (Array Nothing size) =  error ""
--- -- VarArray (Maybe (AbstractDeclarator i))
--- parseAbstractDeclarator (VarArray inner) = error ""
--- -- Parens (Maybe (AbstractDeclarator i)) [ParameterType i]
--- parseAbstractDeclarator (Parens inner params) = error ""
---
-
-
-
-
-
--- Recursion scheme stuff
-
+absDeclAlg :: (Error String :> es) => AbstractDeclaratorF i (AbstractDeclarator i, Eff es (CType -> CType)) -> Eff es (CType -> CType)
+absDeclAlg (ADPtrF quals Nothing) = pure $ PointerTy (foldQualifiers quals)
+absDeclAlg (ADPtrF quals (Just (_, inner))) = inner <&> \ic -> PointerTy (foldQualifiers quals) . ic 
+absDeclAlg (ArrayF _ _) = error ""
+absDeclAlg (VarArrayF _) = error ""
+absDeclAlg (ParensF _ _) = error ""
 
 

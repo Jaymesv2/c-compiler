@@ -7,10 +7,8 @@ import Data.Maybe
 
 import Compiler.Parser
 import Compiler.Parser.Lexer
-import Compiler.Parser.ParseTree (Expr)
 import Compiler.Parser.TokenParsers
 import Compiler.Parser.Tokens
-import Compiler.SymbolTable qualified as SymTbl
 import Effectful
 import Effectful.Error.Static
 import Effectful.State.Static.Local
@@ -24,7 +22,6 @@ import Data.Text qualified as T
 
 import Conduit
 
-import Data.Bits (And (getAnd))
 import Data.Text.IO qualified as TIO
 
 data MacroDef = ObjectMacro [PPToken] | FuncMacro [Identifier] Bool [PPToken]
@@ -61,7 +58,7 @@ handleInclude toks = do
     pure ()
 
 isDefined :: (State PreprocessorState :> es) => Identifier -> Eff es Bool
-isDefined ident = (isJust . M.lookup ident . macroSymTbl) <$> get
+isDefined ident = isJust . M.lookup ident . macroSymTbl <$> get
 
 evalConditional :: (State PreprocessorState :> es) => [PPToken] -> Eff es Bool
 evalConditional toks = do
@@ -98,12 +95,12 @@ handleIfLine line = case line of
             Nothing -> pure () 
 
             -- an inner conditional was found so ignore it
-            Just (IfLine t@(ILIf _)) -> finishBranch >> skipBranch
-            Just (IfLine t@(ILIfDef _)) -> finishBranch >> skipBranch
-            Just (IfLine t@(ILIfNDef _)) -> finishBranch >> skipBranch
-            Just (IfLine t@(ILElIf toks)) -> lift (evalConditional toks) >>= shouldTakeBranch
-            Just (IfLine t@(ILElse)) -> takeBranch -- take the else
-            Just (IfLine t@(ILEndIf)) -> pure () -- end of the conditional
+            Just (IfLine (ILIf _)) -> finishBranch >> skipBranch
+            Just (IfLine (ILIfDef _)) -> finishBranch >> skipBranch
+            Just (IfLine (ILIfNDef _)) -> finishBranch >> skipBranch
+            Just (IfLine (ILElIf toks)) -> lift (evalConditional toks) >>= shouldTakeBranch
+            Just (IfLine ILElse) -> takeBranch -- take the else
+            Just (IfLine ILEndIf) -> pure () -- end of the conditional
             Just _ -> skipBranch
 
         takeBranch :: (State PreprocessorState :> es, Error String :> es) => ConduitT PPLine PPLine (Eff es) ()
@@ -115,12 +112,12 @@ handleIfLine line = case line of
             Just (IfLine t@(ILIfDef _)) -> handleIfLine t >> takeBranch
             Just (IfLine t@(ILIfNDef _)) -> handleIfLine t >> takeBranch
 
-            Just (IfLine t@(ILElIf _)) -> finishBranch -- 
-            Just (IfLine t@(ILElse)) -> finishBranch
+            Just (IfLine (ILElIf _)) -> finishBranch -- 
+            Just (IfLine ILElse) -> finishBranch
             
-            Just (IfLine t@(ILEndIf)) -> pure () -- end of the conditional
+            Just (IfLine ILEndIf) -> pure () -- end of the conditional
 
-            Just line -> yield line >> takeBranch
+            Just line' -> yield line' >> takeBranch
 
 
         -- skips the the EndIf
@@ -129,13 +126,13 @@ handleIfLine line = case line of
             Nothing -> pure () 
 
             -- an inner conditional was found so ignore it
-            Just (IfLine t@(ILIf _)) -> finishBranch >> finishBranch
-            Just (IfLine t@(ILIfDef _)) -> finishBranch >> finishBranch
-            Just (IfLine t@(ILIfNDef _)) -> finishBranch >> finishBranch
-            Just (IfLine t@(ILElIf _)) -> finishBranch
-            Just (IfLine t@(ILElse)) -> finishBranch
-            Just (IfLine t@(ILEndIf)) -> pure () -- end of the conditional
-            Just line -> finishBranch
+            Just (IfLine (ILIf _)) -> finishBranch >> finishBranch
+            Just (IfLine (ILIfDef _)) -> finishBranch >> finishBranch
+            Just (IfLine (ILIfNDef _)) -> finishBranch >> finishBranch
+            Just (IfLine (ILElIf _)) -> finishBranch
+            Just (IfLine ILElse) -> finishBranch
+            Just (IfLine ILEndIf) -> pure () -- end of the conditional
+            Just _ -> finishBranch
 
 
 
