@@ -9,10 +9,11 @@ import Compiler.Parser
 import Compiler.Parser.Lexer
 import Compiler.Parser.TokenParsers
 import Compiler.Parser.Tokens
+
 import Effectful
 import Effectful.Error.Static
 import Effectful.State.Static.Local
-
+import Effectful.Dispatch.Static
 -- import Data.Sequence qualified as S
 
 import Data.List qualified as L
@@ -23,6 +24,29 @@ import Data.Text qualified as T
 import Conduit
 
 import Data.Text.IO qualified as TIO
+
+import System.FilePath
+import Effectful.FileSystem
+
+
+-- example for making an effect
+{-
+data Logger = Logger { logMessage :: String -> IO () }
+data Log :: Effect
+type instance DispatchOf Log = Static WithSideEffects
+newtype instance StaticRep Log = Log Logger
+
+log :: Log :> es => String -> Eff es ()
+log msg = do
+  Log logger <- getStaticRep
+  unsafeEff_ $ logMessage logger msg
+
+runLog :: (IOE :> es) => Logger -> Eff (Log : es) a -> Eff es a
+runLog logger = evalStaticRep (Log logger)
+-}
+
+
+
 
 data MacroDef = ObjectMacro [PPToken] | FuncMacro [Identifier] Bool [PPToken]
 
@@ -38,27 +62,37 @@ data PreprocessorState = PreprocessorState
 newPreprocessorState :: PreprocessorState
 newPreprocessorState = PreprocessorState{macroSymTbl = M.empty}
 
+
+
+
+
+includeFile :: (IOE:>es, FileSystem :> es, Error String :> es) => FilePath -> Eff es T.Text
+includeFile path = do
+    liftIO $ TIO.readFile path 
+    -- pure $ error ""
+
+
+
 handleInclude :: (IOE :> es, State PreprocessorState :> es, Error String :> es, State AlexState :> es) => [PPToken] -> ConduitT i [PPToken] (Eff es) ()
 handleInclude toks = do
     -- TODO: properly concatenate tokens here
     -- TODO: properly resolve headers
-    let file = case toks of
-            [PPStringLiteral s] -> s
-            _ -> error "partially unimplemented: cannot resolve headers other than string literals"
 
-    inp <- liftIO $ TIO.readFile (T.unpack file)
-    -- save the old state
-    -- old_state <- lift $ get @AlexState
-    -- lift $ put @AlexState $ newAlexState inp
-    -- preprocessInner
-    -- lift $ put @AlexState $ old_state
+    file <- case toks of
+            [PPStringLiteral fileName] -> do
+                lift $ runFileSystem $ includeFile $ T.unpack fileName 
+            [PPHeaderName fileName] -> do
+                _ <- lift $ throwError "system search path includes are unsupported"
+                lift $ runFileSystem $ includeFile $ T.unpack fileName 
+            _ -> error "partially unimplemented: cannot resolve headers other than string literals"
     
     -- run everything through the pipeline again
-    alexConduitSource inp .| preprocessInner2
+    alexConduitSource file .| preprocessInner2
     pure ()
 
 isDefined :: (State PreprocessorState :> es) => Identifier -> Eff es Bool
 isDefined ident = isJust . M.lookup ident . macroSymTbl <$> get
+
 
 evalConditional :: (State PreprocessorState :> es) => [PPToken] -> Eff es Bool
 evalConditional toks = do

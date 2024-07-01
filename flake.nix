@@ -126,6 +126,7 @@
           nativeBuildInputs = with pkgs; [
             just
             csmith
+            gcc
             haskellPackages.fast-tags
           ];
         };

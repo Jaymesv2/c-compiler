@@ -100,12 +100,13 @@ common shared
     , effectful
     , effectful-core
     , effectful-plugin
-
     , recursion-schemes
     -- fun stuff
     , selective
     , validation-selective
     , data-fix
+
+    , filepath
     -- , fastsum -- fastsum is marked as broken on nixpkgs :(
 
     --, happy
