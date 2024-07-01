@@ -18,9 +18,9 @@ synopsis:           A Simple C Compiler
 -- A URL where users can report bugs.
 -- bug-reports:
 
-extra-source-files:
-  LICENSE
-  README.md
+-- extra-source-files:
+  -- LICENSE
+   README.md
 
 common shared
   ghc-options:
@@ -28,6 +28,7 @@ common shared
     -Wmissing-deriving-strategies -Wunused-foralls -Wunused-foralls
     -fprint-explicit-foralls -fprint-explicit-kinds
     -fplugin=Effectful.Plugin
+    -funbox-strict-fields 
     -- -fspecialise-aggressively -fexpose-all-unfoldings
 
 
