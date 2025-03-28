@@ -7,6 +7,7 @@ import Compiler.Parser.Preprocessor (preprocess, PreprocessorState)
 
 import Compiler.Parser.ParseTree
 import Compiler.Parser.Tokens
+import Compiler.Parser (Identifier)
 -- import Compiler.Parser.GrammarHelpers
 
 import Effectful
@@ -586,7 +587,6 @@ ExternalDeclaration :: { ExternDecl Identifier }
                 Nothing -> pure ()
             pure decl ) }
 
-
 TranslationUnit :: { [ExternDecl Identifier] }
     : TranslationUnitI   { reverse $1 }
 
@@ -596,7 +596,6 @@ TranslationUnitI :: { [ExternDecl Identifier] }
 
 -- page 145
 -- PREPROCESSING
-
 
 {
 

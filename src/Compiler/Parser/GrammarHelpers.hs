@@ -1,15 +1,18 @@
+{-# LANGUAGE TemplateHaskell, TemplateHaskellQuotes #-}
 module Compiler.Parser.GrammarHelpers  where
 
 import Compiler.Parser.ParseTree
 import Compiler.Types
 import Compiler.SymbolTable
 
+import Control.Lens hiding (para, (<&>))
+
 import Data.Foldable
 import Effectful
 import Effectful.Error.Static
 import Effectful.State.Static.Local
 
-import Compiler.Parser.Tokens (Identifier)
+
 import Data.Set qualified as Set 
 import Data.Set (Set)
 import Data.Sequence qualified as Seq
@@ -32,96 +35,14 @@ import Data.Coerce
 
 import Control.Applicative
 
--- acts like either and collects non fatal warnings
-data Validation w e a
-    = Ok 
-        { val :: a
-        , warnings :: w }
-    | Fail 
-        { err :: e
-        , warnings :: w }
-
-instance Functor (Validation w e) where
-    fmap f r@Ok{..} = r{val=f val}
-    fmap _ s@Fail{err,warnings} = Fail{err,warnings}
-
-instance (Semigroup w, Semigroup e, Semigroup a) => Semigroup (Validation w e a) where
-    Ok{val=val1,warnings=w1} <> Ok{val=val2,warnings=w2} = Ok{val=val1<>val2,warnings=w1<>w2}
-    Ok{warnings=w1} <> Fail{err,warnings=w2} = Fail{err,warnings=w1<>w2}
-    Fail{err,warnings=w1}<>Ok{warnings=w2} = Fail{err,warnings=w1<>w2}
-    Fail{err=e1,warnings=w1} <> Fail{err=e2,warnings=w2} = Fail{err=e1<>e2, warnings=w1<>w2}
-
-instance (Monoid w, Monoid e, Semigroup a) => Monoid (Validation w e a) where
-    mempty = Fail{err=mempty,warnings=mempty}
-
-
-instance (Monoid w, Semigroup e) => Applicative (Validation w e) where
-    liftA2 f Ok{val=val1,warnings=w1} Ok{val=val2,warnings=w2} = Ok{val=f val1 val2,warnings=w1<>w2}
-    liftA2 _ Ok{warnings=w1} Fail{err,warnings=w2} = Fail{err,warnings=w1<>w2}
-    liftA2 _ Fail{err,warnings=w1} Ok{warnings=w2} = Fail{err,warnings=w1<>w2}
-    liftA2 _ Fail{err=e1,warnings=w1} Fail{err=e2,warnings=w2} = Fail{err=e1<>e2, warnings=w1<>w2}
-    pure val = Ok{val,warnings=mempty} 
-
-    
-{- instance (Monoid w, Monoid e) => Alternative (Validation w e) where
-    empty = Fail{err=mempty,warnings=mempty}
-
-    Ok{val,warnings=w1} <|> Ok{warnings=w2} = Ok{val,warnings=w1<>w2}
-    Ok{warnings=w1} <|> Fail{err,warnings=w2} = Ok{val,}
-    Fail{err,warnings=w1}<|>Ok{warnings=w2} = 
-    Fail{err=e1,warnings=w1} <|> Fail{err=e2,warnings=w2} = Fail{err=e1<>e2, warnings=w1<>w2} -}
-
-
-data ValidationReader r w e a
-    = OkR 
-        { val :: a
-        , warnings :: w
-        , env :: r }
-    | FailR
-        { err :: e
-        , warnings :: w }
-
-
-
-
-
-
-
-
-
-
-
-
+-- import Compiler.Parser.Tokens (Identifier)
+type Identifier = Text
 
 
 data DeclaratorParseError
 
-
-
-
-
-
 data VariableDef = VariableDef deriving stock (Eq, Show, Ord)
-
 data FunctionDef = FunctionDef deriving stock (Eq, Show, Ord)
-
-data Ordinaries
-    = Variable VariableID
-    | TypeAlias TypeID
-    | FunctionID FunctionID 
-        deriving stock (Eq,Show, Ord)
-
-getVariableID :: Ordinaries -> Maybe VariableID
-getVariableID (Variable v) = Just v
-getVariableID _ = Nothing
-
-getTypeAliasID :: Ordinaries -> Maybe TypeID
-getTypeAliasID (TypeAlias v) = Just v
-getTypeAliasID _ = Nothing
-
-getFunctionID :: Ordinaries -> Maybe FunctionID
-getFunctionID (FunctionID v) = Just v
-getFunctionID _ = Nothing
 
 newtype FunctionID = MkFunction Int deriving stock (Eq, Show, Ord)
 
@@ -137,96 +58,228 @@ newtype FunctionID = MkFunction Int deriving stock (Eq, Show, Ord)
 -}
 
 
-data ParserState 
-    = ParserState 
-        { 
-          -- scope stuff  
-          ordinaryScope :: !(NonEmpty BlockScope)
-        -- , functionScope :: Maybe (Map Text LabelID)
-        , variableDefs :: !(Map VariableID (Text, VariableDef))
-        , functionDefs :: !(Map FunctionID (Text, FunctionDef))
-        , typeDefs :: !(Map TypeID (Text, CType))
 
-        , variableIdGen :: !UniqueGen
-        , functionIdGen :: !UniqueGen
-        , typeIdGen :: !UniqueGen
-        } deriving stock (Eq, Show)
+data Ordinaries
+    = Variable VariableID
+    | TypeAlias TypeID
+    | FunctionID FunctionID 
+        deriving stock (Eq,Show, Ord)
+makeLenses ''Ordinaries
 
-
-
-newParserState :: ParserState
-newParserState = ParserState
-    { ordinaryScope=emptyBlockScope:|[]
-    , variableDefs=M.empty
-    , functionDefs=M.empty
-    , typeDefs=M.empty
-    , variableIdGen=newUniqueGen
-    , functionIdGen=newUniqueGen
-    , typeIdGen=newUniqueGen
-    }
-
-
+{-
+A block scope contains a map of names to identifiers which should be mapped in ParserState.
+It also contains `definedInScope` which is a set of the ordinaries defined in the current scope
+-}
 data BlockScope = BlockScope 
-    { allOrdinaries :: Map Text Ordinaries
-    , definedInScope :: Set Ordinaries
+    { _allOrdinaries :: Map Text Ordinaries
+    , _definedInScope :: Set Ordinaries
     } deriving stock (Eq, Show)
+makeLenses ''BlockScope
 
 emptyBlockScope :: BlockScope
 emptyBlockScope = BlockScope M.empty Set.empty
 
 
-enterScope :: (State ParserState :> es, IOE :> es) => Eff es ()
-enterScope = modify (\s@ParserState{ordinaryScope=(h:|t)} -> s{ordinaryScope=emptyBlockScope:|(h:t)})
+{-
+ParserState is what the name suggests.
+ordinaryScope contains a BlockScope
+-}
+data ParserState 
+    = ParserState 
+        { 
+          -- scope stuff  
+          -- _ordinaryScope :: !(NonEmpty BlockScope)
+          _currentScope :: BlockScope
+        , _scopeStack  :: [BlockScope]
+        -- , functionScope :: Maybe (Map Text LabelID)
+        , _variableDefs :: !(Map VariableID (Text, VariableDef))
+        , _functionDefs :: !(Map FunctionID (Text, FunctionDef))
+        , _typeDefs :: !(Map TypeID (Text, CType))
+        ,  _idGen :: {-# UNPACK #-} !Int
+        -- , _variableIdGen :: !UniqueGen
+        -- , _functionIdGen :: !UniqueGen
+        -- , _typeIdGen :: !UniqueGen
+        } deriving stock (Eq, Show)
+makeLenses ''ParserState
 
 
-exitScope :: (IOE :> es, State ParserState :> es, Error String :> es) => Eff es ()
-exitScope = do
-    s@ParserState{ordinaryScope=(h:|t)} <- get
-    case t of 
-        [] -> throwError "cannot exit scope"
-        (x:xs) -> put s{ordinaryScope=x:|xs}
+
+
+enterScope :: ParserState -> ParserState
+enterScope ps@ParserState{_currentScope=cs@BlockScope{_allOrdinaries,_definedInScope},_scopeStack} 
+    = ps{_currentScope=BlockScope{_allOrdinaries,_definedInScope=Set.empty},_scopeStack=cs:_scopeStack}
+
+exitScope :: ParserState -> Maybe (BlockScope, ParserState)
+exitScope ps@ParserState{_currentScope,_scopeStack}
+    = case _scopeStack of
+        [] -> Nothing
+        (x:xs) -> Just (_currentScope, ps{_currentScope=x,_scopeStack=xs})
+
+enterScopeE :: (State ParserState :> es) => Eff es ()
+enterScopeE = modify enterScope
+
+exitScopeE :: (State ParserState :> es, Error String :> es) => Eff es BlockScope
+exitScopeE = get >>= maybe (throwError "Cannot exit top level scope") (\(b,newP) -> pure newP $> b) . exitScope 
+
+
+-- inScopeE :: (State ParserState :> es) => Eff es a -> Eff es (a, BlockScope)
+-- inScopeE f = error ""
+
+defineType :: State ParserState :> es => (Declarator Text -> ParserState  -> (CType, ParserState)) -> Text -> Declarator Text ->  Eff es CType
+defineType f name decl = do
+    state $ \parserState@ParserState{_typeDefs,_idGen} -> let
+            newState = parserState{_idGen=_idGen+1,_typeDefs=M.insert (MkType _idGen) (name, newVal) _typeDefs}
+            (newVal,finalState) = f decl newState
+        in (newVal, finalState) 
+
+
+
+
+-- newParserState :: ParserState
+-- newParserState = ParserState
+--     { ordinaryScope=emptyBlockScope:|[]
+--     , variableDefs=M.empty
+--     , functionDefs=M.empty
+--     , typeDefs=M.empty
+--     , variableIdGen=newUniqueGen
+--     , functionIdGen=newUniqueGen
+--     , typeIdGen=newUniqueGen
+--     }
+
+
+-- recMap :: m -> (i -> j -> m -> m) -> i -> x -> (m -> x -> j) -> m
+-- recMap omap updateMap idx val f = map2
+--     where
+--         map2 = updateMap idx newVal omap
+--         newVal = f map2 val
+
+
+
+getVariableID :: Ordinaries -> Maybe VariableID
+getVariableID (Variable v) = Just v
+getVariableID _ = Nothing
+
+getTypeAliasID :: Ordinaries -> Maybe TypeID
+getTypeAliasID (TypeAlias v) = Just v
+getTypeAliasID _ = Nothing
+
+getFunctionID :: Ordinaries -> Maybe FunctionID
+getFunctionID (FunctionID v) = Just v
+getFunctionID _ = Nothing
+
 
 --exitScope :: (State ParserState :> es) => Eff es (Set.)
 
 isType :: (State ParserState :> es) => Text -> Eff es Bool
-isType name = isJust . (getTypeAliasID <=< M.lookup name . allOrdinaries . N.head . ordinaryScope) <$> get
+isType name = isJust . (getTypeAliasID <=< M.lookup name . _allOrdinaries . _currentScope) <$> get
     
 
+
+nextId :: (State ParserState :> es) => Eff es Int
+nextId = state (idGen <+~ 1)
+
+
+defineIdentifier :: (State ParserState :> es, Error String :> es) => Text -> VariableDef -> Eff es VariableID
+defineIdentifier name val = do
+    -- ordinaries' :: NonEmpty BlockScope <- view ordinaryScope <$> get
+    -- let j = ordinaries' ^? _head
+    error ""
+
+getCurrentScope :: (State ParserState :> es) => Eff es BlockScope
+getCurrentScope = _currentScope <$> get
+
+
+defineTypeAlias :: (State ParserState :> es, Error String :> es) => Text -> CType -> Eff es TypeID
+defineTypeAlias name val = do
+    -- ParserState{_ordinaryScope=BlockScope{_allOrdinaries, _definedInScope}:|t, _typeDefs} <- get
+
+
+    -- case M.lookup name _allOrdinaries of 
+    --     Just x -> when (Set.member x _definedInScope) (throwError "cannot redefine a variable in the same scope")
+    --     Nothing -> pure ()
+
+
+    newId <- nextId
+    
+    
+    pure newId
+    -- put s{
+    --     _ordinaryScope=BlockScope{allOrdinaries=M.insert name (Variable newId) allOrdinaries, definedInScope=Set.insert (Variable newId) definedInScope}:|t, 
+    --     _variableIdGen=variableIdGen', 
+    --     _variableDefs=M.insert newId (name, val) _variableDefs
+    -- }
+    -- pure newId
+
+    error ""
+
+
+
+
+
+
+{--
 -- name and value
 defineIdentifier :: (State ParserState :> es, Error String :> es) => Text -> VariableDef -> Eff es VariableID
 defineIdentifier name val = do
-    s@ParserState{ordinaryScope=BlockScope{allOrdinaries, definedInScope}:|t, variableIdGen, variableDefs} <- get
+    s@ParserState{_ordinaryScope=BlockScope{allOrdinaries, definedInScope}:|t, _variableIdGen, _variableDefs} <- get
 
     case M.lookup name allOrdinaries of 
         Just x -> when (Set.member x definedInScope) (throwError "cannot redefine a variable in the same scope")
         Nothing -> pure ()
 
-    let (newId, variableIdGen') = nextVariableID variableIdGen
+    let (newId, variableIdGen') = nextVariableID _variableIdGen
     put s{
-        ordinaryScope=BlockScope{allOrdinaries=M.insert name (Variable newId) allOrdinaries, definedInScope=Set.insert (Variable newId) definedInScope}:|t, 
-        variableIdGen=variableIdGen', 
-        variableDefs=M.insert newId (name, val) variableDefs
+        _ordinaryScope=BlockScope{allOrdinaries=M.insert name (Variable newId) allOrdinaries, definedInScope=Set.insert (Variable newId) definedInScope}:|t, 
+        _variableIdGen=variableIdGen', 
+        _variableDefs=M.insert newId (name, val) _variableDefs
     }
     pure newId
 
 -- name and value
 defineTypeAlias :: (State ParserState :> es, Error String :> es) => Text -> CType -> Eff es TypeID
 defineTypeAlias name val = do
-    s@ParserState{ordinaryScope=BlockScope{allOrdinaries, definedInScope}:|t, typeIdGen, typeDefs} <- get
+    s@ParserState{_ordinaryScope=BlockScope{allOrdinaries, definedInScope}:|t, _typeIdGen, _typeDefs} <- get
 
     case M.lookup name allOrdinaries of 
         Just x -> when (Set.member x definedInScope) (throwError "cannot redefine a variable in the same scope")
         Nothing -> pure ()
 
-    let (newId, typeIdGen') = nextTypeID typeIdGen
+    let (newId, typeIdGen') = nextTypeID _typeIdGen
 
     put s{
-        ordinaryScope=BlockScope{allOrdinaries=M.insert name (TypeAlias newId) allOrdinaries, definedInScope=Set.insert (TypeAlias newId) definedInScope}:|t, 
-        typeIdGen=typeIdGen', 
-        typeDefs=M.insert newId (name, val) typeDefs
+        _ordinaryScope=BlockScope{allOrdinaries=M.insert name (TypeAlias newId) allOrdinaries, definedInScope=Set.insert (TypeAlias newId) definedInScope}:|t, 
+        _typeIdGen=typeIdGen', 
+        _typeDefs=M.insert newId (name, val) _typeDefs
     }
 
     pure newId
+ -}
+
+
+
+
+
+
+
+
+
+{- 
+compileTranslationUnit :: [ExternDecl Identifier] -> Eff es ()
+compileTranslationUnit = foldM compileExternDecl ()
+
+compileExternDecl :: () -> ExternDecl Text -> Eff es ()
+compileExternDecl _ (EFunctionDef definition) = error ""
+compileExternDecl _ (EDecl declaration) = error ""
+
+compileFunctionDefinition :: () -> FunctionDefinition Text -> Eff es ()
+compileFunctionDefinition _ (FunctionDefinition specifiers declarator declarationList body) = error ""
+
+compileEDeclaration :: () -> Declaration Text -> Eff es ()
+compileEDeclaration _ (Declaration specifiers initDeclarations) = error "" 
+-}
+
+
+
 
 
 
@@ -241,11 +294,8 @@ qualToQualifiers TQVolatile = volatileTypeQualifier
 foldQualifiers :: [TypeQualifier] -> TypeQualifiers
 foldQualifiers = foldMap qualToQualifiers
 
-
-
 -- parseTopLevelDeclaration :: Declaration i -> [(i, CType, Initializer i)]
 -- parseTopLevelDeclaration (Declaration ) =error "" 
-
 
 -- TODO: implement warnings 
 extractDeclSpecifiers :: (Error String :> es) => [DeclarationSpecifiers i] -> Eff es (Maybe StorageClassSpecifier, [TypeSpecifier i], TypeQualifiers, Maybe FunctionSpecifier)
@@ -279,6 +329,8 @@ extractDeclSpecifiers specs =
             DSTypeSpec typeSpec -> (a, typeSpec:b, c, d) 
             DSTypeQual typeQual -> (a,b,typeQual:c,d)
             DSFuncSpec funcSpec -> (a,b,c,funcSpec:d)
+
+
 
 parseTypeSpecifiers :: (Error String :> es) => [TypeSpecifier i] -> Eff es CType
 parseTypeSpecifiers spcs = do
@@ -356,7 +408,6 @@ parseTypeSpecifiers spcs = do
     typedef name
 -}
 
-
 parseTypeName :: (Error String :> es) => TypeName i -> Eff es CType
 parseTypeName (TypeName specquals absdecl) = do
     let (quals', specs') = partitionEithers specquals
@@ -369,8 +420,9 @@ parseTypeName (TypeName specquals absdecl) = do
             pure (q typ)
         Nothing -> pure typ
 
-parseFunctionDefinition :: [DeclarationSpecifiers i] -> Declarator i -> Maybe [Declaration i] -> Eff es (i, CType, [(i, CType)], Bool)
-parseFunctionDefinition = error ""
+-- parseFunctionDefinition :: [DeclarationSpecifiers i] -> Declarator i -> Maybe [Declaration i] -> Eff es (i, CType, [(i, CType)], Bool)
+parseFunctionDefinition :: FunctionDefinition i -> Eff es (i, CType, [(i, CType)], Bool)
+parseFunctionDefinition (FunctionDefinition specifiers declarator arguments body) = error ""
 
 parseDeclaration :: (Error String :> es, State ParserState :> es) => Declaration Identifier -> Eff es [(VariableID, CType, Maybe (Initializer i))]
 parseDeclaration (Declaration specifiers initDecls) = do
@@ -393,13 +445,16 @@ parseDeclaration (Declaration specifiers initDecls) = do
                         --pure (oid, c tspc, init') 
                     ) initDecls $> []
 
+
+
+
+
 parseDeclarator :: (Error String :> es, State ParserState :> es) => Declarator i -> Eff es (i, CType -> CType)
 parseDeclarator = cata declAlg
 
-
 declAlg :: (State ParserState :> es, Error String :> es) => DeclaratorF i (Eff es (i, CType -> CType)) -> Eff es (i, CType -> CType)
 declAlg (DDIdentF i) = pure (i, id)
-declAlg (DDPointerF quals inner) = inner <&> \(i,ic) -> (i, PointerTy (foldQualifiers quals) . ic )
+declAlg (DDPointerF quals inner) = inner <&> fmap (\ic -> PointerTy (foldQualifiers quals) . ic )
 declAlg (DDArrF inner isStatic quals size _) = throwError "havent implemented arr declarators yet"
 -- inner <&> \(i,ic) -> (i,ic)
 declAlg (DDFuncPListF inner params) = do

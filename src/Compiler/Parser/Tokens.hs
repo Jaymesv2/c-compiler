@@ -1,7 +1,6 @@
-module Compiler.Parser.Tokens (Identifier, PPToken (..), PPSpecial (..), Punctuator (..), Keyword (..), Token (..), Size (..), FloatSize (..), NumRep (..), Sign (..), Constant (..)) where
+module Compiler.Parser.Tokens (PPToken (..), PPSpecial (..), Punctuator (..), Keyword (..), Token (..), Size (..), FloatSize (..), NumRep (..), Sign (..), Constant (..)) where
 
-import Compiler.Parser
-
+import Compiler.Parser ( Identifier )
 import Data.Text qualified as T
 
 data PPToken

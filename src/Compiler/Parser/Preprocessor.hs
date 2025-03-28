@@ -19,14 +19,15 @@ import Effectful.Dispatch.Static
 import Data.List qualified as L
 import Data.Map qualified as M
 
+
 import Data.Text qualified as T
 
 import Conduit
 
 import Data.Text.IO qualified as TIO
 
-import System.FilePath
-import Effectful.FileSystem
+import System.FilePath ()
+import Effectful.FileSystem ( runFileSystem, FileSystem )
 
 
 -- example for making an effect
@@ -59,6 +60,10 @@ data PreprocessorState = PreprocessorState
     { macroSymTbl :: M.Map T.Text MacroDef
     }
 
+--newPreprocessorState :: PreprocessorState
+
+
+--newPreprocessorState :: PreprocessorState
 newPreprocessorState :: PreprocessorState
 newPreprocessorState = PreprocessorState{macroSymTbl = M.empty}
 
@@ -66,10 +71,11 @@ newPreprocessorState = PreprocessorState{macroSymTbl = M.empty}
 
 
 
-includeFile :: (IOE:>es, FileSystem :> es, Error String :> es) => FilePath -> Eff es T.Text
+includeFile :: (IOE :> es, FileSystem :> es, Error String :> es) => FilePath -> Eff es T.Text
 includeFile path = do
     liftIO $ TIO.readFile path 
     -- pure $ error ""
+
 
 
 
@@ -99,6 +105,7 @@ evalConditional toks = do
     -- print a warning 
     pure False
 
+
 -- decides whether to skip a 
 handleIfLine :: (State PreprocessorState :> es, Error String :> es) => PPIfLine -> ConduitT PPLine PPLine (Eff es) ()
 handleIfLine line = case line of 
@@ -123,7 +130,7 @@ handleIfLine line = case line of
             IfLine ILElse -> elseM
             IfLine ILEndIf -> pure ()
             l -> defaultM l) -}
-
+        
         skipBranch :: (State PreprocessorState :> es, Error String :> es) => ConduitT PPLine PPLine (Eff es) ()
         skipBranch = await >>= \case
             Nothing -> pure () 
@@ -136,7 +143,7 @@ handleIfLine line = case line of
             Just (IfLine ILElse) -> takeBranch -- take the else
             Just (IfLine ILEndIf) -> pure () -- end of the conditional
             Just _ -> skipBranch
-
+        
         takeBranch :: (State PreprocessorState :> es, Error String :> es) => ConduitT PPLine PPLine (Eff es) ()
         takeBranch = await >>= \case
             Nothing -> pure () -- TODO: issue a warning about not having an ending for an #if 

@@ -107,6 +107,8 @@ common shared
     , data-fix
 
     , filepath
+    , lens
+    , optics
     -- , fastsum -- fastsum is marked as broken on nixpkgs :(
 
     --, happy
@@ -119,7 +121,6 @@ common shared
     --, data-default
     --, directory
     --, filepath
-    --, optics-core
     --, profunctors
     --, relude        >=1.0
     --, shower
@@ -132,12 +133,11 @@ common shared
 library compiler-lib
   import: shared
   exposed-modules:
-    --Compiler.Parser.Span
+    Compiler.Parser.Span
     Compiler.Parser.Tokens
     Compiler.Parser.ParseTree
     Compiler.Parser.Preprocessor
     Compiler.Parser.PreprocessorGrammar
-    Compiler.Parser.ParserState
     Compiler.Parser.Lexer
     Compiler.Parser.TokenParsers
     Compiler.Parser.Grammar

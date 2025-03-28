@@ -1,3 +1,4 @@
+{-# LANGUAGE MagicHash #-}
 module Compiler.Types where
 
 import Compiler.Parser
@@ -98,45 +99,38 @@ Abstract declarators only specify a type name, no identifiers.
 
 
 
-newtype UniqueGen = MkUniqueGen Int deriving stock (Eq, Show, Ord)
 
-newUniqueGen :: UniqueGen
-newUniqueGen = MkUniqueGen 0
+
+-- newtype UniqueGen = MkUniqueGen Int deriving stock (Eq, Show, Ord)
 
 
 -- page 46
-newtype Unique = MkUnique Int deriving stock (Eq, Show, Ord)
+-- newtype Unique = MkUnique Int deriving stock (Eq, Show, Ord)
 
-nextUnique :: UniqueGen -> (Unique, UniqueGen)
-nextUnique (MkUniqueGen i) = (MkUnique i, MkUniqueGen (i+1))
-
---instance Show Unique where
-
---newtype LabelID = MkLabel Unique deriving stock (Eq, Show)
+-- nextUnique :: UniqueGen -> (Unique, UniqueGen)
+-- nextUnique (MkUniqueGen i) = (MkUnique i, MkUniqueGen (i+1))
 
 
---newtype MemberID = MkIdent Unique deriving stock (Eq, Show)
+newtype VariableID = MkVariable Int deriving stock (Eq, Show, Ord)
 
-newtype VariableID = MkVariable Unique deriving stock (Eq, Show, Ord)
+-- nextVariableID :: UniqueGen -> (VariableID, UniqueGen)
+-- nextVariableID (MkUniqueGen i) = (MkVariable . MkUnique $ i, MkUniqueGen (i+1))
 
-nextVariableID :: UniqueGen -> (VariableID, UniqueGen)
-nextVariableID (MkUniqueGen i) = (MkVariable . MkUnique $ i, MkUniqueGen (i+1))
+newtype TypeID = MkType Int deriving stock (Eq, Show, Ord)
 
-newtype TypeID = MkType Unique deriving stock (Eq, Show, Ord)
+-- nextTypeID :: UniqueGen -> (TypeID, UniqueGen)
+-- nextTypeID (MkUniqueGen i) = (MkType . MkUnique $ i, MkUniqueGen (i+1))
 
-nextTypeID :: UniqueGen -> (TypeID, UniqueGen)
-nextTypeID (MkUniqueGen i) = (MkType . MkUnique $ i, MkUniqueGen (i+1))
-
-newtype TagID = MkData Unique deriving stock (Eq, Show, Ord)
+newtype TagID = MkData Int deriving stock (Eq, Show, Ord)
 
 
 
 
 
-data TypeMap =
-    TypeMap {
-        types :: M.Map TypeID CType
-    }
+-- data TypeMap =
+--     TypeMap {
+--         types :: M.Map TypeID CType
+--     }
 
 
 data TypeClassification 
@@ -205,10 +199,12 @@ data CType
     | UnionTy CUnion
     | FuncTy CFunc
     | PointerTy TypeQualifiers CType
+    | TypeRef TypeID
     deriving stock (Eq, Show)
 
 data CFunc = CFunc CType [CType] Bool
     deriving stock (Eq, Show)
+
 
 newtype CStruct = CStruct [(CType, Identifier, Maybe Int)]
     deriving stock (Eq, Show)
@@ -220,7 +216,7 @@ isCompatible :: CType -> CType -> Bool
 isCompatible x y = x == y
 
 isComplete :: CType -> Bool
-isComplete ty = error ""
+isComplete _ = error ""
 
 isIncomplete :: CType -> Bool
 isIncomplete = not . isComplete

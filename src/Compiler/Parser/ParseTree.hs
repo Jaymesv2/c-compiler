@@ -3,6 +3,7 @@
 module Compiler.Parser.ParseTree where
 
 import Compiler.Parser.Tokens
+import Compiler.Parser
 
 import Data.Functor.Foldable.TH
 
@@ -151,6 +152,9 @@ data PrimitiveTypes
     | PuImaginary -- u for underscore
     deriving stock (Eq, Show)
 
+
+
+
 -- page 99
 data TypeSpecifier i
     = PrimType PrimitiveTypes
@@ -250,6 +254,7 @@ makeBaseFunctor ''AbstractDeclarator
 makeBaseFunctor ''Declarator
 makeBaseFunctor ''Expr
 makeBaseFunctor ''Statement
+
 -- makeBaseFunctor ''InitDeclaration
 {- Expr i
 Declaration i = Declaration [DeclarationSpecifiers i] [InitDeclaration i]
