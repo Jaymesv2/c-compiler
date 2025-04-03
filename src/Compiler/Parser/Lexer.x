@@ -272,8 +272,6 @@ begin code _ _ _ = do alexSetStartCode code; alexMonadScan
 -- andBegin :: AlexAction result -> Int -> AlexAction result
 (action `andBegin` code) input len = do alexSetStartCode code; action input len
 
-
-
 type AlexInput = (AlexPosn,       -- current position,
                   Char,           -- previous char
                   [Byte],         -- pending bytes on current char

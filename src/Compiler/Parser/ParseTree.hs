@@ -137,6 +137,8 @@ data ParameterDeclaration i
     | VariadicDeclaration
     deriving stock (Eq, Show, Functor, Foldable, Traversable) 
 
+
+
 data PrimitiveTypes
     = PVoid
     | PChar
@@ -151,8 +153,6 @@ data PrimitiveTypes
     | PuComplex
     | PuImaginary -- u for underscore
     deriving stock (Eq, Show)
-
-
 
 
 -- page 99

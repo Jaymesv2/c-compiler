@@ -510,4 +510,3 @@ absDeclAlg (ArrayF _ _) = error ""
 absDeclAlg (VarArrayF _) = error ""
 absDeclAlg (ParensF _ _) = error ""
 
-

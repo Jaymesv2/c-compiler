@@ -2,6 +2,8 @@ module Compiler.Parser.Preprocessor (preprocess, PreprocessorState, runPreproces
 
 import Compiler.Parser.PreprocessorGrammar
 
+import Compiler.Parser.Span
+
 import Data.Functor
 import Data.Maybe
 
@@ -23,6 +25,7 @@ import Data.Map qualified as M
 import Data.Text qualified as T
 
 import Conduit
+import Data.Conduit.Combinators qualified as CC
 
 import Data.Text.IO qualified as TIO
 
@@ -93,7 +96,7 @@ handleInclude toks = do
             _ -> error "partially unimplemented: cannot resolve headers other than string literals"
     
     -- run everything through the pipeline again
-    alexConduitSource file .| preprocessInner2
+    alexConduitSource file .| CC.map dropSpans .|  preprocessInner2
     pure ()
 
 isDefined :: (State PreprocessorState :> es) => Identifier -> Eff es Bool
@@ -231,10 +234,13 @@ preprocess2 = preprocessInner2 .| mapMC expandTokenLineC .| mapC mergeStringLite
 -- runPreprocessor' :: T.Text -> Eff (State SymbolTable ': State PreprocessorState ': es) a -> Eff es a
 -- runPreprocessor' inp = runAlex inp . evalState newPreprocessorState . evalState [M.empty]
 preprocessInner :: (IOE :> es, Error String :> es, State AlexState :> es, State PreprocessorState :> es) => ConduitT i [PPToken] (Eff es) ()
-preprocessInner = alexConduit .| chunkLines  .| mapMC parseLine .| preprocessLines
+preprocessInner = alexConduit .| CC.map dropSpans .| chunkLines  .| mapMC parseLine .| preprocessLines
 
 preprocess :: (IOE :> es, Error String :> es, State AlexState :> es, State PreprocessorState :> es) => ConduitT i Token (Eff es) ()
 preprocess = preprocessInner .| mapMC expandTokenLineC .| mapC mergeStringLiterals .| concatC .| ppTokensToTokens convertIdent
+
+dropSpans :: Spanned PPToken -> PPToken
+dropSpans (Spanned _ tok) = tok
 
 expandTokenLineC :: (Error String :> es, State PreprocessorState :> es) => [PPToken] -> Eff es [PPToken]
 expandTokenLineC inp = get >>= (`expandTokenLine` inp) . macroSymTbl 

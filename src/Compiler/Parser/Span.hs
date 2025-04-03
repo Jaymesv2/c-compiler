@@ -1,4 +1,4 @@
-module Compiler.Parser.Span (Span, Spanned) where
+module Compiler.Parser.Span (Span (..), Spanned (..)) where
 
 import qualified Data.Text as T
 
@@ -8,12 +8,14 @@ import qualified Data.Text as T
 data Span
     = Span
         { filename :: !T.Text
-        , start :: !(Int, Int, Int) -- line, col, abs pos
+        , start :: !(Int, Int, Int) -- abs pos, line, col
         , end :: !(Int, Int, Int)
         , inner :: [Span]
         }
     | EmptySpan
     deriving stock (Eq, Show)
+
+
 
 mergeSpans :: Span -> Span -> Span
 mergeSpans (Span fname aStart aEnd aInner) (Span fname2 bStart bEnd bInner) = Span fname aStart bEnd (aInner ++ bInner)
@@ -26,8 +28,8 @@ instance Semigroup Span where
 instance Monoid Span where
     mempty = EmptySpan
 
-data Spanned a = Spanned a Span deriving stock (Eq, Show, Functor)
+data Spanned a = Spanned Span a deriving stock (Eq, Show, Functor)
 
 instance Applicative Spanned where
-    liftA2 f (Spanned a aSpan) (Spanned b bSpan) = Spanned (f a b) (aSpan <> bSpan)
-    pure a = Spanned a EmptySpan
+    liftA2 f (Spanned aSpan a) (Spanned bSpan b) = Spanned (aSpan <> bSpan) (f a b) 
+    pure = Spanned EmptySpan
