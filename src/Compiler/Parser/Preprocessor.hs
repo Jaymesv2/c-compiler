@@ -1,6 +1,6 @@
 module Compiler.Parser.Preprocessor (preprocess, PreprocessorState, runPreprocessor) where
 
-import Compiler.Parser.PreprocessorGrammar
+--import Compiler.Parser.PreprocessorGrammar
 
 import Compiler.Parser.Span
 
@@ -52,7 +52,7 @@ runLog logger = evalStaticRep (Log logger)
 
 
 
-data MacroDef = ObjectMacro [PPToken] | FuncMacro [Identifier] Bool [PPToken]
+data MacroDef = ObjectMacro [Spanned PPToken] | FuncMacro [Identifier] Bool [Spanned PPToken]
 
 data PPMode
     = SkipBranchMode
@@ -82,31 +82,30 @@ includeFile path = do
 
 
 
-handleInclude :: (IOE :> es, State PreprocessorState :> es, Error String :> es, State AlexState :> es) => [PPToken] -> ConduitT i [PPToken] (Eff es) ()
+handleInclude :: (IOE :> es, State PreprocessorState :> es, Error String :> es, State AlexState :> es) => [Spanned PPToken] -> ConduitT i [Spanned PPToken] (Eff es) ()
 handleInclude toks = do
     -- TODO: properly concatenate tokens here
     -- TODO: properly resolve headers
-
     file <- case toks of
-            [PPStringLiteral fileName] -> do
+            [Spanned _ (PPStringLiteral fileName)] -> do
                 lift $ runFileSystem $ includeFile $ T.unpack fileName 
-            [PPHeaderName fileName] -> do
+            [Spanned _ (PPHeaderName fileName)] -> do
                 _ <- lift $ throwError "system search path includes are unsupported"
                 lift $ runFileSystem $ includeFile $ T.unpack fileName 
             _ -> error "partially unimplemented: cannot resolve headers other than string literals"
-    
     -- run everything through the pipeline again
-    alexConduitSource file .| CC.map dropSpans .|  preprocessInner2
+    alexConduitSource file .|  preprocessInner2
     pure ()
 
 isDefined :: (State PreprocessorState :> es) => Identifier -> Eff es Bool
 isDefined ident = isJust . M.lookup ident . macroSymTbl <$> get
 
 
-evalConditional :: (State PreprocessorState :> es) => [PPToken] -> Eff es Bool
+evalConditional :: (State PreprocessorState :> es) => [Spanned PPToken] -> Eff es Bool
 evalConditional toks = do
-    -- print a warning 
+    -- print a warning
     pure False
+
 
 
 -- decides whether to skip a 
@@ -187,7 +186,7 @@ handleIfLine line = case line of
 --awaitOrStop action = await >>= maybe (pure ()) action
 
 
-handleControlLine :: (IOE :> es, State PreprocessorState :> es, Error String :> es, State AlexState :> es) => PPControlLine -> ConduitT PPLine [PPToken] (Eff es) ()
+handleControlLine :: (IOE :> es, State PreprocessorState :> es, Error String :> es, State AlexState :> es) => PPControlLine -> ConduitT PPLine [Spanned PPToken] (Eff es) ()
 handleControlLine (CLInclude toks) = handleInclude toks >> pure ()
 handleControlLine (CLDefineObj name val) = do
     s@PreprocessorState{macroSymTbl = mSymTbl} <- lift get
@@ -215,7 +214,7 @@ handleControlLine CLParseError = do
     liftIO $ print ("Encountered a parse error while parsing a control line" :: T.Text)
 
 
-preprocessLines :: (IOE :> es, State PreprocessorState :> es, Error String :> es, State AlexState :> es) => ConduitT PPLine [PPToken] (Eff es) ()
+preprocessLines :: (IOE :> es, State PreprocessorState :> es, Error String :> es, State AlexState :> es) => ConduitT PPLine [Spanned PPToken] (Eff es) ()
 preprocessLines = awaitForever $ \case
     TextLine line' -> yield line'
     IfLine l -> handleIfLine l  .| preprocessLines
@@ -224,25 +223,27 @@ preprocessLines = awaitForever $ \case
     -- PPSEnd -> error ""
 
 
-preprocessInner2 :: (IOE :> es, Error String :> es, State PreprocessorState :> es, State AlexState :> es) => ConduitT PPToken [PPToken] (Eff es) ()
+preprocessInner2 :: (IOE :> es, Error String :> es, State PreprocessorState :> es, State AlexState :> es) => ConduitT (Spanned PPToken) [Spanned PPToken] (Eff es) ()
 preprocessInner2 = chunkLines  .| mapMC parseLine .| preprocessLines
 
-preprocess2 :: (IOE :> es, Error String :> es, State PreprocessorState :> es, State AlexState :> es) => ConduitT PPToken Token (Eff es) ()
-preprocess2 = preprocessInner2 .| mapMC expandTokenLineC .| mapC mergeStringLiterals .| concatC .| ppTokensToTokens convertIdent
+--preprocess2 :: (IOE :> es, Error String :> es, State PreprocessorState :> es, State AlexState :> es) => ConduitT (Spanned PPToken) (Spanned Token) (Eff es) ()
+--preprocess2 = preprocessInner2 .| mapMC expandTokenLineC .| mapC mergeStringLiterals .| concatC .| ppTokensToTokens convertIdent
 
 
 -- runPreprocessor' :: T.Text -> Eff (State SymbolTable ': State PreprocessorState ': es) a -> Eff es a
 -- runPreprocessor' inp = runAlex inp . evalState newPreprocessorState . evalState [M.empty]
-preprocessInner :: (IOE :> es, Error String :> es, State AlexState :> es, State PreprocessorState :> es) => ConduitT i [PPToken] (Eff es) ()
-preprocessInner = alexConduit .| CC.map dropSpans .| chunkLines  .| mapMC parseLine .| preprocessLines
+preprocessInner :: (IOE :> es, Error String :> es, State AlexState :> es, State PreprocessorState :> es) => ConduitT i [Spanned PPToken] (Eff es) ()
+preprocessInner = alexConduit .|  chunkLines  .| mapMC parseLine .| preprocessLines
 
+
+--preprocess :: (IOE :> es, Error String :> es, State AlexState :> es, State PreprocessorState :> es) => ConduitT i (Spanned Token) (Eff es) ()
 preprocess :: (IOE :> es, Error String :> es, State AlexState :> es, State PreprocessorState :> es) => ConduitT i Token (Eff es) ()
-preprocess = preprocessInner .| mapMC expandTokenLineC .| mapC mergeStringLiterals .| concatC .| ppTokensToTokens convertIdent
+preprocess = preprocessInner .| mapMC expandTokenLineC .| mapC mergeStringLiterals .| concatC .| ppTokensToTokens convertIdent .| CC.map dropSpans
 
-dropSpans :: Spanned PPToken -> PPToken
-dropSpans (Spanned _ tok) = tok
+dropSpans :: Spanned a -> a
+dropSpans (Spanned _ x) = x
 
-expandTokenLineC :: (Error String :> es, State PreprocessorState :> es) => [PPToken] -> Eff es [PPToken]
+expandTokenLineC :: (Error String :> es, State PreprocessorState :> es) => [Spanned PPToken] -> Eff es [Spanned PPToken]
 expandTokenLineC inp = get >>= (`expandTokenLine` inp) . macroSymTbl 
 
 runPreprocessor :: (State AlexState :> es, Error String :> es) => Eff (State PreprocessorState ': es) a -> Eff es a
@@ -254,31 +255,31 @@ runPreprocessor = evalState newPreprocessorState
     
     
 
-chunkLines :: (Error String :> es) => ConduitT PPToken [PPToken] (Eff es) ()
+chunkLines :: (Error String :> es) => ConduitT (Spanned PPToken) [Spanned PPToken] (Eff es) ()
 chunkLines = loop []
     where 
         loop xs = await >>= \case
             Nothing -> yield xs
-            Just (PPSpecial PPNewline) -> yield (reverse xs) >> loop []
+            Just (Spanned _ (PPSpecial PPNewline)) -> yield (reverse xs) >> loop []
             Just x -> loop (x:xs)
 
-ppTokensToTokens :: (Error String :> es) => (Identifier -> Token) -> ConduitT PPToken Token (Eff es) ()
+ppTokensToTokens :: (Error String :> es) => (Identifier -> Token) -> ConduitT (Spanned PPToken) (Spanned Token) (Eff es) ()
 ppTokensToTokens f = awaitForever $ \case
-    PPHeaderName _x -> lift $ throwError ""
-    PPOther _o -> lift $ throwError ""
-    PPNumber n -> case parseNumConstant n of
+    Spanned s (PPHeaderName _x) -> lift $ throwError ""
+    Spanned s (PPOther _o) -> lift $ throwError ""
+    Spanned s (PPNumber n) -> case parseNumConstant n of
       Left _err -> lift $ throwError "failed to parse num constant"
-      Right c -> yield (Constant c)
-    PPCharConst c -> yield (Constant $ CharConst c)
-    PPStringLiteral s -> yield (StringLiteral s) 
-    PPPunctuator punct -> yield (Punctuator punct) 
-    PPIdent ident -> yield (f ident) 
-    PPSpecial PPNewline -> pure ()
-    PPSpecial PPSLParen -> yield (Punctuator LParen)
+      Right c -> yield (Spanned s $ Constant c)
+    Spanned s (PPCharConst c) -> yield (Spanned s $ Constant $ CharConst c)
+    Spanned s (PPStringLiteral st) -> yield (Spanned s $ StringLiteral st) 
+    Spanned s (PPPunctuator punct) -> yield (Spanned s $ Punctuator punct) 
+    Spanned s (PPIdent ident) -> yield (Spanned s $ f ident) 
+    Spanned s (PPSpecial PPNewline) -> pure ()
+    Spanned s (PPSpecial PPSLParen) -> yield (Spanned s $ Punctuator LParen)
 
 
-mergeStringLiterals :: [PPToken] -> [PPToken]
-mergeStringLiterals (PPStringLiteral s1 : PPStringLiteral s2 : t) = PPStringLiteral (T.append s1 s2) : mergeStringLiterals t
+mergeStringLiterals :: [Spanned PPToken] -> [Spanned PPToken]
+mergeStringLiterals (Spanned sp1 (PPStringLiteral s1) : (Spanned sp2 (PPStringLiteral s2)) : t) = Spanned (sp1 <> sp2) (PPStringLiteral (T.append s1 s2)) : mergeStringLiterals t
 mergeStringLiterals (h : t) = h : mergeStringLiterals t
 mergeStringLiterals [] = []
 
@@ -286,12 +287,12 @@ mergeStringLiterals [] = []
 expand each argument, then paste each into the stream and expand again
 -}
 
-expandTokenLine :: (Error String :> es) => M.Map T.Text MacroDef -> [PPToken] -> Eff es [PPToken {- :: (State AlexState :> es, Error String :> es, State PreprocessorState :> es) => Eff es () -}]
+expandTokenLine :: (Error String :> es) => M.Map T.Text MacroDef -> [Spanned PPToken] -> Eff es [Spanned PPToken] {- :: (State AlexState :> es, Error String :> es, State PreprocessorState :> es) => Eff es () -}
 expandTokenLine macros = fmap mergeStringLiterals . go []
   where
     go acc [] = pure (reverse acc)
-    go acc ((PPIdent ident) : t) = case M.lookup ident macros of
-        Nothing -> go (PPIdent ident : acc) t
+    go acc (Spanned s (PPIdent ident) : t) = case M.lookup ident macros of
+        Nothing -> go (Spanned s (PPIdent ident) : acc) t
         Just (ObjectMacro replacementList) -> go (replacementList ++ acc) t
         Just (FuncMacro args variadic replacementList) -> expandFuncMacro args variadic replacementList t >>= \(list, remToks) -> go (list ++ acc) remToks
     go acc (h : t) = go (h : acc) t
@@ -299,29 +300,29 @@ expandTokenLine macros = fmap mergeStringLiterals . go []
     -- tail recursive function which returns tokens until a comma is found.
     -- commas within nested function calls are ignored
 
-    getArg' :: Int -> [PPToken] -> Bool -> [PPToken] -> Either [PPToken] (Bool, [PPToken], [PPToken])
-    getArg' 0 acc False (PPPunctuator Comma : t) = Right (True, reverse acc, t)
-    getArg' 0 acc _ (PPPunctuator RParen : t) = Right (False, reverse acc, t)
-    getArg' n acc ignoreCommas (PPPunctuator RParen : t) = getArg' (n - 1) (PPPunctuator RParen : acc) ignoreCommas t
-    getArg' n acc ignoreCommas (PPSpecial PPSLParen : t) = getArg' (n + 1) (PPSpecial PPSLParen : acc) ignoreCommas t
+    getArg' :: Int -> [Spanned PPToken] -> Bool -> [Spanned PPToken] -> Either [Spanned PPToken] (Bool, [Spanned PPToken], [Spanned PPToken])
+    getArg' 0 acc False (Spanned _ (PPPunctuator Comma) : t) = Right (True, reverse acc, t)
+    getArg' 0 acc _ (Spanned _ (PPPunctuator RParen) : t) = Right (False, reverse acc, t)
+    getArg' n acc ignoreCommas (Spanned s (PPPunctuator RParen) : t) = getArg' (n - 1) (Spanned s ( PPPunctuator RParen ) : acc) ignoreCommas t
+    getArg' n acc ignoreCommas (Spanned s (PPSpecial PPSLParen) : t) = getArg' (n + 1) (Spanned s ( PPSpecial PPSLParen ) : acc) ignoreCommas t
     getArg' n acc ignoreCommas (h : t) = getArg' n (h : acc) ignoreCommas t
     getArg' _ acc _ [] = Left $ reverse acc
 
-    getArg :: Bool -> [PPToken] -> Either [PPToken] (Bool, [PPToken], [PPToken])
+    getArg :: Bool -> [Spanned PPToken] -> Either [Spanned PPToken] (Bool, [Spanned PPToken], [Spanned PPToken])
     getArg = getArg' 0 []
 
     -- splits the args
-    getFuncMacroArgs' :: (Error String :> es) => [[PPToken]] -> [PPToken] -> Eff es ([[PPToken]], [PPToken])
+    getFuncMacroArgs' :: (Error String :> es) => [[Spanned PPToken]] -> [Spanned PPToken] -> Eff es ([[Spanned PPToken]], [Spanned PPToken])
     getFuncMacroArgs' acc toks = case getArg False toks of
         Left _ -> throwError ""
         Right (True, arg, remToks) -> getFuncMacroArgs' (arg : acc) remToks
         Right (False, arg, remToks) -> pure (reverse $ arg : acc, remToks)
 
-    expandFuncMacro :: (Error String :> es) => [Identifier] -> Bool -> [PPToken] -> [PPToken] -> Eff es ([PPToken], [PPToken])
+    expandFuncMacro :: (Error String :> es) => [Identifier] -> Bool -> [Spanned PPToken] -> [Spanned PPToken] -> Eff es ([Spanned PPToken], [Spanned PPToken])
     expandFuncMacro argNames variadic replacementList toks = do
         toks' <- case toks of
-            PPSpecial PPSLParen : t -> pure t
-            PPPunctuator LParen : t -> pure t
+            Spanned _ ( PPSpecial PPSLParen ) : t -> pure t
+            Spanned _ (PPPunctuator LParen) : t -> pure t
             _ -> throwError ""
 
         (args, remToks) <- getFuncMacroArgs' [] toks'
@@ -330,18 +331,18 @@ expandTokenLine macros = fmap mergeStringLiterals . go []
         expandedReplacementList <- expandTokenLine newMacros replacementList
         pure (reverse expandedReplacementList, remToks)
       where
-        zipArgs :: (Error String :> es) =>  [(Identifier, [PPToken])] -> [Identifier] -> [[PPToken]] -> Eff es [(Identifier, [PPToken])]
+        zipArgs :: (Error String :> es) =>  [(Identifier, [Spanned PPToken])] -> [Identifier] -> [[Spanned PPToken]] -> Eff es [(Identifier, [Spanned PPToken])]
         zipArgs acc (hi : ti) (ha : ta) = zipArgs ((hi, ha) : acc) ti ta
         -- correct number of args
         zipArgs acc [] [] | variadic = pure (("__VA_ARGS__", []) : acc)
         zipArgs acc [] [] = pure acc
         -- extra args
-        zipArgs acc [] remArgs@(_ : _) | variadic = pure $ ("__VA_ARGS__", L.intercalate [PPPunctuator Comma] remArgs) : acc
+        zipArgs acc [] remArgs@(_ : _) | variadic = pure $ ("__VA_ARGS__", L.intercalate [Spanned EmptySpan $ PPPunctuator Comma] remArgs) : acc
         zipArgs _ [] (_ : _) = throwError ""
         zipArgs _ _ [] = throwError ""
 
 -- gets a token from the token queue and refills the queue if it is empty
--- ppNextToken :: (IOE :> es, State PreprocessorState :> es, Error String :> es, State AlexState :> es) => Eff es PPToken
+-- ppNextToken :: (IOE :> es, State PreprocessorState :> es, Error String :> es, State AlexState :> es) => Eff es (Spanned PPToken)
 -- ppNextToken = do
 --     s@PreprocessorState{outQueue = oq, macroSymTbl = mst, concatLookahead = lk} <- get @PreprocessorState
 --     case oq of
@@ -398,4 +399,118 @@ convertIdent ident = case ident of
     "_Bool" -> Keyword TuBool
     "_Complex" -> Keyword TuComplex
     i -> Ident i
+
+
+
+
+
+ --parseLine
+--parseLine :: (IOE :> es, Error String :> es, State PreprocessorState :> es, State AlexState :> es) => ConduitT (Spanned PPToken) [Spanned PPToken] (Eff es) ()
+parseLine :: (Error String :> es) => [Spanned PPToken] -> Eff es PPLine 
+parseLine (Spanned s (PPPunctuator Stringize):xs) = parseControlLine s xs
+parseLine xs = pure $ TextLine xs
+
+parseControlLine :: (Error String :> es) => Span -> [Spanned PPToken] -> Eff es PPLine
+parseControlLine s' (Spanned s (PPIdent "if"):xs) = pure $ IfLine $ ILIf xs
+
+parseControlLine s' [Spanned s (PPIdent "ifdef"),Spanned s2 (PPIdent ident)] = pure $ IfLine $ ILIfDef ident
+parseControlLine s' (Spanned s (PPIdent "ifdef"):(Spanned s2 (PPIdent ident)):xs) = throwError "invalid tokens after identifier in ifdef line"
+
+parseControlLine s' [Spanned s (PPIdent "ifndef"),Spanned s2 (PPIdent ident)] = pure $ IfLine $ ILIfNDef ident
+parseControlLine s' (Spanned s (PPIdent "ifndef"):(Spanned s2 (PPIdent ident)):xs) = throwError $ "invalid tokens after identifier in ifndef line: " ++ show xs
+parseControlLine s' (Spanned s (PPIdent "elif"):xs) = pure $ IfLine $ ILElIf xs
+parseControlLine s' [Spanned s (PPIdent "else")] = pure $ IfLine ILElse
+parseControlLine s' [Spanned s (PPIdent "endif")] = pure $ IfLine ILEndIf
+
+
+
+parseControlLine s' (Spanned s (PPIdent "include"):xs) = pure $ ControlLine $ CLInclude xs
+parseControlLine s' [ Spanned s (PPIdent "undef"),Spanned s2 (PPIdent ident) ] = pure $ ControlLine $ CLUndef ident
+parseControlLine s' ((Spanned s (PPIdent "undef")):((Spanned s2 (PPIdent ident)):xs)) = error ""--pure $ ControlLine $ CLInclude xs
+parseControlLine s' (Spanned s (PPIdent "line"):xs) = pure $ ControlLine $ CLLine xs
+parseControlLine s' (Spanned s (PPIdent "error"):xs) = pure $ ControlLine $ CLError xs
+parseControlLine s' (Spanned s (PPIdent "pragma"):xs) = pure $ ControlLine $ CLPragma xs
+
+parseControlLine s' ((Spanned s (PPIdent "define")):(Spanned s2 (PPSpecial PPSLParen)):xs) = pure $ ControlLine $ CLPragma xs
+
+parseControlLine s' ((Spanned s (PPIdent "define")):(Spanned s2 (PPIdent ident)):(Spanned s3 (PPSpecial PPSLParen)):xs) = pure $ ControlLine $ CLPragma xs
+--parseControlLins' e ((Spanned s (PPIdent "define")):(Spanned s2 (PPPunctuator LParen)):xs) = pure $ ControlLine $ CLPragma xs
+
+parseControlLine s' ((Spanned s (PPIdent "define")):(Spanned s2 (PPIdent ident)):xs) = pure $ ControlLine $ CLDefineObj ident xs
+
+parseControlLine s' [Spanned s (PPIdent ident)] = pure $ NonDirective ident
+parseControlLine s' [] = pure $ ControlLine CLEmpty
+parseControlLine s' xs = throwError $ "error parsing a control line: " ++ show s' ++ " : " ++ show xs
+{-
+Line :: { PPLine }
+    : IfLine            { IfLine $1 }
+    | ControlLine       { ControlLine $1 }
+    | TextLine          { TextLine $1  }
+    | '#' ident         { NonDirective $2 }
+
+
+IfLine :: { PPIfLine }
+    : '#' if  PPTokens      { ILIf $3 }
+    | '#' ifdef ident       { ILIfDef $3 }
+    | '#' ifndef ident      { ILIfNDef $3 }
+    | '#' elif PPTokens     { ILElIf  $3 }
+    | '#' else              { ILElse     }
+    | '#' endif             { ILEndIf    }
+
+TextLine :: { [ PPToken ]}
+    : PPTokens  { reverse $1 }
+    |           { [] }
+
+ControlLine :: { PPControlLine }
+    : '#' include PPTokens          { CLInclude (reverse $3)    }
+    
+    | '#' define ident PPTokens     { CLDefineObj $3 (reverse $4)  }
+
+    | '#' define ident '(' ')' PPTokens                         { CLDefineFunc $3 [] False (reverse $6)  }
+    | '#' define ident '(' '...' ')' PPTokens                   { CLDefineFunc $3 [] True (reverse $7)  }
+    | '#' define ident '(' IdentList ')' PPTokens               { CLDefineFunc $3 (reverse $5) False (reverse $7)  }
+    | '#' define ident '(' IdentList ',' '...' ')' PPTokens     { CLDefineFunc $3 (reverse $5) True (reverse $9)  }
+
+    | '#' undef ident               { CLUndef $3                }
+    | '#' line PPTokens             { CLLine (reverse $3)       }
+    | '#' error PPTokens            { CLError (reverse $3)      }
+    | '#' pragma PPTokens           { CLPragma (reverse $3)     }
+    | '#'                           { CLEmpty                   }
+
+
+IdentList :: { [Identifier] }
+    : ident                 { [$1] }
+    | IdentList ',' ident   { $3 : $1 }
+-}
+
+data PPLine
+    = IfLine PPIfLine
+    | ControlLine PPControlLine
+    | TextLine [Spanned PPToken]
+    | NonDirective Identifier
+    -- | PPSEnd
+    deriving stock (Eq, Show)
+
+data PPIfLine
+    = ILIf [Spanned PPToken]
+    | ILIfDef Identifier
+    | ILIfNDef Identifier
+    | ILElIf [Spanned PPToken]
+    | ILElse
+    | ILEndIf
+    deriving stock (Eq, Show)
+
+
+data PPControlLine
+    = CLInclude [Spanned PPToken]
+    | CLDefineObj Identifier [Spanned PPToken] 
+    | CLDefineFunc Identifier [Identifier] Bool [Spanned PPToken]
+    | CLUndef Identifier
+    | CLLine [Spanned PPToken]
+    | CLError [Spanned PPToken]
+    | CLPragma [Spanned PPToken]
+    | CLEmpty
+    | CLParseError
+    deriving stock (Eq, Show)
+
 
