@@ -4,8 +4,8 @@ import Compiler.Parser ( Identifier )
 import Data.Text qualified as T
 
 data PPToken
-  = PPHeaderName T.Text
-  | PPIdent Identifier
+  = PPIdent Identifier
+  | PPHeaderName T.Text
   | PPNumber T.Text
   | PPCharConst T.Text
   | PPStringLiteral T.Text

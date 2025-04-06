@@ -133,7 +133,7 @@ common shared
 library compiler-lib
   import: shared
   exposed-modules:
-    Compiler.Parser.Span
+    Compiler.Parser.SrcLoc
     Compiler.Parser.Tokens
     Compiler.Parser.ParseTree
     Compiler.Parser.Preprocessor

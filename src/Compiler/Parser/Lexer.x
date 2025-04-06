@@ -23,7 +23,7 @@ import qualified Data.Map as M
 import Compiler.Parser.Tokens
 import Compiler.Parser
 
-import Compiler.Parser.Span
+import Compiler.Parser.SrcLoc
 
 import Effectful
 import Effectful.Error.Static
@@ -31,7 +31,7 @@ import Effectful.State.Static.Local
 }
 -- %action "AlexInput -> Int -> Eff es (Maybe PPToken)"
 
-%action "AlexInput -> Int -> AlexPosn -> Eff es (Maybe (Spanned PPToken))"
+%action "AlexInput -> Int -> AlexPosn -> Eff es (Maybe (Located PPToken))"
 %typeclass "(State AlexState :> es, Error String :> es)"
 
 $digit = [0-9] 
@@ -60,7 +60,7 @@ tokens :-
 <0> "}"                         { punctuator RBrace }
 -- 
 <0> [$white]^"("                { punctuator LParen }
-<0> [^$white]^"("               { mkSpanned $ \_ _ -> pure $ Just $ PPSpecial PPSLParen }
+<0> [^$white]^"("               { mkLocated $ \_ _ -> pure $ Just $ PPSpecial PPSLParen }
 <0> ")"                         { punctuator RParen }
 <0> "["                         { punctuator LBrack }
 <0> "]"                         { punctuator RBrack }
@@ -107,26 +107,26 @@ tokens :-
 <0> "#"                         { punctuator Stringize   }
 <0> "##"                        { punctuator TokenPaste  }
 -- string literals
-<0>  \" @schar+ \"              { mkSpanned $ \(_,_,_,t) i -> pure $ Just $ PPStringLiteral (T.take (i - 2) (T.tail t)) }
+<0>  \" @schar+ \"              { mkLocated $ \(_,_,_,t) i -> pure $ Just $ PPStringLiteral (T.take (i - 2) (T.tail t)) }
 -- wide string literals
-<0>  "L\"" @schar+ \"           { mkSpanned $ \(_,_,_,t) i -> pure $ Just $ PPStringLiteral (T.take (i-3) (T.tail . T.tail $ t)) } 
-<0>  \' @cchar+ \'              { mkSpanned $ \(_,_,_,t) i -> pure $ Just $ PPCharConst (T.take (i-2) (T.tail t))}
-<0>  $nondigit $identnondigit*  { mkSpanned $ \(_,_,_,t) i -> pure $ Just $ PPIdent (T.take i t) }
-<0>  ([^$white] # [$nondigit $digit \'\" \( \) \{ \} \[ \] \| \* \+ \~ \- \; \, \? \. \^ \/ \# \> \< & \% ! = : ]) [^$white]*  { mkSpanned $ \(_,_,_,t) i -> pure $ Just $ PPOther (T.take i t)}
+<0>  "L\"" @schar+ \"           { mkLocated $ \(_,_,_,t) i -> pure $ Just $ PPStringLiteral (T.take (i-3) (T.tail . T.tail $ t)) } 
+<0>  \' @cchar+ \'              { mkLocated $ \(_,_,_,t) i -> pure $ Just $ PPCharConst (T.take (i-2) (T.tail t))}
+<0>  $nondigit $identnondigit*  { mkLocated $ \(_,_,_,t) i -> pure $ Just $ PPIdent (T.take i t) }
+<0>  ([^$white] # [$nondigit $digit \'\" \( \) \{ \} \[ \] \| \* \+ \~ \- \; \, \? \. \^ \/ \# \> \< & \% ! = : ]) [^$white]*  { mkLocated $ \(_,_,_,t) i -> pure $ Just $ PPOther (T.take i t)}
 
 -- this is a hack and I dont like it but it works :/
 -- headernames
-<0>  "<" [^\n>]+ ">"            { mkSpanned $ \(_,_,_,t) i -> pure $ Just $ PPHeaderName (T.take (i-2) (T.tail t)) }
--- <0>  \" [^\n\"] \"           { mkSpanned $ \(_,_,_,t) i -> pure $ Just $ error "e" }
+<0>  "<" [^\n>]+ ">"            { mkLocated $ \(_,_,_,t) i -> pure $ Just $ PPHeaderName (T.take (i-2) (T.tail t)) }
+-- <0>  \" [^\n\"] \"           { mkLocated $ \(_,_,_,t) i -> pure $ Just $ error "e" }
 
         -- preprocessing numbers
-<0>  "."? $digit ($digit | $identnondigit | [eEpP] @sign | ".")* {mkSpanned $ \(_,_,_,t) i -> pure $ Just $ PPNumber (T.take i t)}
+<0>  "."? $digit ($digit | $identnondigit | [eEpP] @sign | ".")* {mkLocated $ \(_,_,_,t) i -> pure $ Just $ PPNumber (T.take i t)}
 <0>  ($white # [\n])+;
 
 -- dont emit a newline if (physical line concatenation)
 <0>  \\\n ; 
-<0>  \n                         {mkSpanned $ \_ _ -> pure $ Just $ PPSpecial PPNewline}
--- <0>  [\n]                        {mkSpanned $ \(_,_,_,t) i -> pure $ Just $ PPNewline}
+<0>  \n                         {mkLocated $ \_ _ -> pure $ Just $ PPSpecial PPNewline}
+-- <0>  [\n]                        {mkLocated $ \(_,_,_,t) i -> pure $ Just $ PPNewline}
 
 
 
@@ -143,20 +143,16 @@ tokens :-
 <blockcomment> "*/"             { begin 0 } -- match */
 
 {
-mkSpanned :: (AlexInput -> Int -> Eff es (Maybe PPToken)) -> (AlexInput -> Int -> AlexPosn -> Eff es (Maybe (Spanned PPToken)))
-mkSpanned f inp@(startPos,_,_,_) len endPos = fmap (Spanned span) <$> (f inp len)
+mkLocated :: (AlexInput -> Int -> Eff es (Maybe PPToken)) -> (AlexInput -> Int -> AlexPosn -> Eff es (Maybe (Located PPToken)))
+mkLocated f inp@((AlexPn sAbs sLine sCol ),_,_,_) len (AlexPn eAbs eLine eCol) = fmap (L span) <$> (f inp len)
     where
-        span = Span "" ( alexPosnToTuple startPos ) ( alexPosnToTuple endPos) []
-
-alexPosnToTuple :: AlexPosn -> (Int,Int,Int)
-alexPosnToTuple (AlexPn a b c) = (a,b,c)
-
+        span = SrcSpan "" sLine sCol eLine eCol
 
 --basicAction :: (State AlexState :> es) => Token -> (AlexInput -> Int -> Eff es Token)
 --basicAction token _ _ = pure token
 
-punctuator :: (State AlexState :> es) => Punctuator -> (AlexInput -> Int -> AlexPosn -> Eff es (Maybe (Spanned PPToken)))
-punctuator token = mkSpanned $ \_ _->  pure $ Just $ PPPunctuator token 
+punctuator :: (State AlexState :> es) => Punctuator -> (AlexInput -> Int -> AlexPosn -> Eff es (Maybe (Located PPToken)))
+punctuator token = mkLocated $ \_ _->  pure $ Just $ PPPunctuator token 
 
 alexEOF :: Eff es (Maybe PPToken)
 alexEOF = pure Nothing
@@ -209,7 +205,7 @@ alexSetStartCode :: State AlexState :> es => Int -> Eff es ()
 alexSetStartCode sc = modify (\s -> s{alex_scd=sc}) 
 
 
-alexConduitSource :: (Error String :> es) => T.Text -> ConduitT i (Spanned PPToken) (Eff es) ()
+alexConduitSource :: (Error String :> es) => T.Text -> ConduitT i (Located PPToken) (Eff es) ()
 alexConduitSource contents = loop (newAlexState contents)
     where
         loop s = do
@@ -220,7 +216,7 @@ alexConduitSource contents = loop (newAlexState contents)
                     yield n
                     loop s'
 
-alexConduit :: (Error String :> es, State AlexState :> es) => ConduitT i (Spanned PPToken) (Eff es) ()
+alexConduit :: (Error String :> es, State AlexState :> es) => ConduitT i (Located PPToken) (Eff es) ()
 alexConduit = do
     token <- lift alexMonadScan
     case token of
@@ -238,13 +234,14 @@ alexPrintCondTokens inp = runAlex inp (runConduit $ (alexConduit .| mapM_C (prin
 
 
 
-alexMonadScan :: (Error String :> es, State AlexState :> es) => Eff es (Maybe (Spanned PPToken))
+alexMonadScan :: (Error String :> es, State AlexState :> es) => Eff es (Maybe (Located PPToken))
 alexMonadScan = do
   inp__ <- alexGetInput
   sc <- alexGetStartCode
   case alexScan inp__ sc of
     -- TODO: I should probably change this to include actual span info :/
-    AlexEOF -> fmap (Spanned EmptySpan) <$> alexEOF
+    --AlexEOF -> fmap (L (Unhelpful )) <$> alexEOF
+    AlexEOF -> pure Nothing --fmap (L (Unhelpful )) <$> alexEOF
     AlexError ((AlexPn _ line column),_,_,_) -> throwError $ "lexical error at line " ++ (show line) ++ ", column " ++ (show column)
     AlexSkip  inp__' _len -> do
       alexSetInput inp__'
@@ -252,7 +249,7 @@ alexMonadScan = do
     --      AlexToken inp__' len (action :: State AlexState :> es => AlexInput -> Int -> AlexPosn -> Eff es Token) -> do
     AlexToken inp__'@(pos',_,_,_) len action -> do
       alexSetInput inp__'
-        --(Spanned (Span "" pos pos' []) ) <$> 
+        --(L (Span "" pos pos' []) ) <$> 
       action (ignorePendingBytes inp__) len pos'
 
 
