@@ -137,7 +137,6 @@ library compiler-lib
     Compiler.Parser.Tokens
     Compiler.Parser.ParseTree
     Compiler.Parser.Preprocessor
-    Compiler.Parser.PreprocessorGrammar
     Compiler.Parser.Lexer
     Compiler.Parser.TokenParsers
     Compiler.Parser.Grammar
@@ -160,5 +159,10 @@ test-suite tests
   import: shared
   type: exitcode-stdio-1.0
   main-is: Test.hs
-  build-depends: HUnit, QuickCheck, compiler-lib
+  build-depends: 
+    , tasty
+    , tasty-hunit
+    , tasty-quickcheck
+    , compiler-lib
+  --HUnit, QuickCheck, compiler-lib
   hs-source-dirs: tests
