@@ -1,4 +1,4 @@
-module Compiler.Parser.Preprocessor (preprocess, PreprocessorState, runPreprocessor) where
+module Compiler.Parser.Preprocessor (preprocess, PreprocessorState, runPreprocessor, PreprocessorOptions (..)) where
 
 --import Compiler.Parser.PreprocessorGrammar
 
@@ -30,7 +30,8 @@ import Data.Conduit.Combinators qualified as CC
 import Data.Text.IO qualified as TIO
 
 import System.FilePath ()
-import Effectful.FileSystem ( runFileSystem, FileSystem )
+import Effectful.FileSystem ( runFileSystem, FileSystem, makeAbsolute, findFile )
+import Effectful.FileSystem.IO.File
 
 
 -- example for making an effect
@@ -49,6 +50,11 @@ runLog :: (IOE :> es) => Logger -> Eff (Log : es) a -> Eff es a
 runLog logger = evalStaticRep (Log logger)
 -}
 
+newtype PreprocessorOptions = PPOptions {
+    includePaths :: [String]
+}
+
+
 
 
 
@@ -60,41 +66,38 @@ data PPMode
     deriving stock (Show, Eq)
 
 data PreprocessorState = PreprocessorState
-    { macroSymTbl :: M.Map T.Text MacroDef
+    { macroSymTbl :: M.Map T.Text MacroDef,
+      opts :: PreprocessorOptions
     }
 
 --newPreprocessorState :: PreprocessorState
 
 
 --newPreprocessorState :: PreprocessorState
-newPreprocessorState :: PreprocessorState
-newPreprocessorState = PreprocessorState{macroSymTbl = M.empty}
-
-
-
-
-
-includeFile :: (IOE :> es, FileSystem :> es, Error String :> es) => FilePath -> Eff es T.Text
-includeFile path = do
-    liftIO $ TIO.readFile path 
-    -- pure $ error ""
-
-
+newPreprocessorState :: PreprocessorOptions -> PreprocessorState
+newPreprocessorState opts = PreprocessorState{macroSymTbl = M.empty, opts=opts}
 
 
 handleInclude :: (IOE :> es, State PreprocessorState :> es, Error String :> es, State AlexState :> es) => [Located PPToken] -> ConduitT i [Located PPToken] (Eff es) ()
 handleInclude toks = do
+    searchPaths <- includePaths . opts <$> lift get
+    
     -- TODO: properly concatenate tokens here
     -- TODO: properly resolve headers
-    file <- case toks of
-            [L _ (PPStringLiteral fileName)] -> do
-                lift $ runFileSystem $ includeFile $ T.unpack fileName 
-            [L _ (PPHeaderName fileName)] -> do
-                _ <- lift $ throwError "system search path includes are unsupported"
-                lift $ runFileSystem $ includeFile $ T.unpack fileName 
+    let (fileName,includeSystem, loc) = case toks of
+            -- don't search system directories
+            [L s (PPStringLiteral fileName_)] -> (T.unpack fileName_, False,s)
+            -- search system directories
+            [L s (PPHeaderName fileName_)] -> (T.unpack fileName_, True,s)
             _ -> error "partially unimplemented: cannot resolve headers other than string literals"
-    -- run everything through the pipeline again
-    alexConduitSource file .|  preprocessInner2
+
+    (contents,filePath) <- lift $ runFileSystem $ do
+        file <- findFile searchPaths fileName >>= \case
+            Nothing -> throwError $ "Cannot find file " ++ fileName ++ " "
+            Just f -> pure f
+        conts <- liftIO $ TIO.readFile file
+        pure (conts, file)
+    alexConduitSource contents filePath .|  preprocessInner2
     pure ()
 
 isDefined :: (State PreprocessorState :> es) => Identifier -> Eff es Bool
@@ -246,8 +249,8 @@ dropSpans (L _ x) = x
 expandTokenLineC :: (Error String :> es, State PreprocessorState :> es) => [Located PPToken] -> Eff es [Located PPToken]
 expandTokenLineC inp = get >>= (`expandTokenLine` inp) . macroSymTbl 
 
-runPreprocessor :: (State AlexState :> es, Error String :> es) => Eff (State PreprocessorState ': es) a -> Eff es a
-runPreprocessor = evalState newPreprocessorState 
+runPreprocessor :: (State AlexState :> es, Error String :> es) => PreprocessorOptions -> Eff (State PreprocessorState ': es) a -> Eff es a
+runPreprocessor opts = evalState (newPreprocessorState opts)
 
 -- .| concatC
 
@@ -274,7 +277,7 @@ ppTokensToTokens f = awaitForever $ \case
     L s (PPStringLiteral st) -> yield (L s $ StringLiteral st) 
     L s (PPPunctuator punct) -> yield (L s $ Punctuator punct) 
     L s (PPIdent ident) -> yield (L s $ f ident) 
-    L s (PPSpecial PPNewline) -> pure ()
+    L _ (PPSpecial PPNewline) -> pure ()
     L s (PPSpecial PPSLParen) -> yield (L s $ Punctuator LParen)
 
 

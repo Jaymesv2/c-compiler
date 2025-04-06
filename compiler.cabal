@@ -109,6 +109,7 @@ common shared
     , filepath
     , lens
     , optics
+    , directory
     -- , fastsum -- fastsum is marked as broken on nixpkgs :(
 
     --, happy

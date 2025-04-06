@@ -1,6 +1,6 @@
 {
 -- {-# LANGUAGE NoMonomorphismRestriction #-}
-module Compiler.Parser.Lexer (alexMonadScan, runAlex, AlexState, newAlexState, printTokens, alexConduit, alexConduitSource, alexPrintCondTokens) where
+module Compiler.Parser.Lexer (alexMonadScan, runAlex, AlexState, newAlexState, printTokens, alexConduit, alexConduitSource, alexPrintCondTokens, getCurrentFilePath) where
 
 import Compiler.Parser
 import Compiler.SymbolTable
@@ -166,15 +166,19 @@ data AlexState = AlexState {
     alex_inp :: T.Text, -- the current input
     alex_chr :: !Char,  -- the character before the input
     alex_bytes :: [Byte],        -- rest of the bytes for the current char
-    alex_scd :: !Int    -- the current startcode
+    alex_scd :: !Int,    -- the current startcode
+    alex_filename :: !FilePath
 } deriving stock (Eq, Show)
 
-newAlexState input = AlexState alexStartPos input '\n' [] 0
+newAlexState input fileName = AlexState alexStartPos input '\n' [] 0 fileName
+
+getCurrentFilePath :: AlexState -> FilePath
+getCurrentFilePath = alex_filename
 
 -- Compile with -funbox-strict-fields for best results!
 -- handle the effects here
-runAlex :: T.Text -> Eff (State AlexState ': Error String ':  es) a -> Eff es (Either (CallStack, String) a)
-runAlex input__ = runError . evalState (newAlexState input__)
+runAlex :: T.Text -> FilePath -> Eff (State AlexState ': Error String ':  es) a -> Eff es (Either (CallStack, String) a)
+runAlex input__ path = runError . evalState (newAlexState input__ path)
 
 
 
@@ -205,8 +209,8 @@ alexSetStartCode :: State AlexState :> es => Int -> Eff es ()
 alexSetStartCode sc = modify (\s -> s{alex_scd=sc}) 
 
 
-alexConduitSource :: (Error String :> es) => T.Text -> ConduitT i (Located PPToken) (Eff es) ()
-alexConduitSource contents = loop (newAlexState contents)
+alexConduitSource :: (Error String :> es) => T.Text -> FilePath -> ConduitT i (Located PPToken) (Eff es) ()
+alexConduitSource contents filePath = loop (newAlexState contents filePath)
     where
         loop s = do
             (token,s') <- lift $ runState s alexMonadScan
@@ -229,8 +233,8 @@ alexConduit = do
 print' :: (IOE :> es, Show a) => a -> Eff es ()
 print' x = liftIO $ print x
 
-alexPrintCondTokens :: (IOE :> es) => T.Text -> Eff es ()
-alexPrintCondTokens inp = runAlex inp (runConduit $ (alexConduit .| mapM_C (print' ) .| sinkNull)) $> ()
+alexPrintCondTokens :: (IOE :> es) => T.Text -> FilePath -> Eff es ()
+alexPrintCondTokens inp p = runAlex inp p (runConduit $ (alexConduit .| mapM_C (print' ) .| sinkNull)) $> ()
 
 
 
