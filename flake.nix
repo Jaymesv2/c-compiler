@@ -35,6 +35,7 @@
 
           # Packages to add on top of `basePackages`
           packages = {
+            #haskellPackages.HTF = "0.15.0.2";
             #happy.source = "1.20.1.1";
             #alex.source = "3.3.0.0";
             # Add source or Hackage overrides here
@@ -49,7 +50,7 @@
           settings = {
             # Need alex and happy
             compiler = {
-              extraBuildDepends = [ pkgs.haskellPackages.alex pkgs.haskellPackages.happy ];
+              extraBuildDepends = [ pkgs.haskellPackages.alex pkgs.haskellPackages.happy pkgs.haskellPackages.HTF ];
             };
 
             /*
