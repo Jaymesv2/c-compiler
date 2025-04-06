@@ -143,10 +143,12 @@ tokens :-
 <blockcomment> "*/"             { begin 0 } -- match */
 
 {
-mkLocated :: (AlexInput -> Int -> Eff es (Maybe PPToken)) -> (AlexInput -> Int -> AlexPosn -> Eff es (Maybe (Located PPToken)))
-mkLocated f inp@((AlexPn sAbs sLine sCol ),_,_,_) len (AlexPn eAbs eLine eCol) = fmap (L span) <$> (f inp len)
-    where
-        span = SrcSpan "" sLine sCol eLine eCol
+
+mkLocated :: (State AlexState :> es) => (AlexInput -> Int -> Eff es (Maybe PPToken)) -> (AlexInput -> Int -> AlexPosn -> Eff es (Maybe (Located PPToken)))
+mkLocated f inp@((AlexPn sAbs sLine sCol ),_,_,_) len (AlexPn eAbs eLine eCol) = do
+        srcPath <- getCurrentFilePath <$> get
+        let span = SrcSpan srcPath sLine sCol eLine eCol
+        fmap (L span) <$> (f inp len)
 
 --basicAction :: (State AlexState :> es) => Token -> (AlexInput -> Int -> Eff es Token)
 --basicAction token _ _ = pure token

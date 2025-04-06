@@ -240,11 +240,11 @@ preprocessInner = alexConduit .|  chunkLines  .| mapMC parseLine .| preprocessLi
 
 
 --preprocess :: (IOE :> es, Error String :> es, State AlexState :> es, State PreprocessorState :> es) => ConduitT i (Located Token) (Eff es) ()
-preprocess :: (IOE :> es, Error String :> es, State AlexState :> es, State PreprocessorState :> es) => ConduitT i Token (Eff es) ()
-preprocess = preprocessInner .| mapMC expandTokenLineC .| mapC mergeStringLiterals .| concatC .| ppTokensToTokens convertIdent .| CC.map dropSpans
+preprocess :: (IOE :> es, Error String :> es, State AlexState :> es, State PreprocessorState :> es) => ConduitT i (Located Token) (Eff es) ()
+preprocess = preprocessInner .| mapMC expandTokenLineC .| mapC mergeStringLiterals .| concatC .| ppTokensToTokens convertIdent
 
-dropSpans :: Located a -> a
-dropSpans (L _ x) = x
+-- dropSpans :: Located a -> a
+-- dropSpans (L _ x) = x
 
 expandTokenLineC :: (Error String :> es, State PreprocessorState :> es) => [Located PPToken] -> Eff es [Located PPToken]
 expandTokenLineC inp = get >>= (`expandTokenLine` inp) . macroSymTbl 
@@ -279,7 +279,6 @@ ppTokensToTokens f = awaitForever $ \case
     L s (PPIdent ident) -> yield (L s $ f ident) 
     L _ (PPSpecial PPNewline) -> pure ()
     L s (PPSpecial PPSLParen) -> yield (L s $ Punctuator LParen)
-
 
 mergeStringLiterals :: [Located PPToken] -> [Located PPToken]
 mergeStringLiterals (L sp1 (PPStringLiteral s1) : (L sp2 (PPStringLiteral s2)) : t) = L (sp1 <> sp2) (PPStringLiteral (T.append s1 s2)) : mergeStringLiterals t

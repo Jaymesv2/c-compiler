@@ -8,6 +8,7 @@ import Compiler.Parser.Preprocessor (preprocess, PreprocessorState)
 import Compiler.Parser.ParseTree
 import Compiler.Parser.Tokens
 import Compiler.Parser (Identifier)
+import Compiler.Parser.SrcLoc
 -- import Compiler.Parser.GrammarHelpers
 
 import Effectful
@@ -27,105 +28,105 @@ import Control.Monad
 
 %name clike TranslationUnit
 
-%monad {(IOE :> es, State ParserScope :> es, Error String :> es, State AlexState :> es, State PreprocessorState :> es )}  {ConduitT Token Void (Eff es) } {>>=} {return}
+%monad {(IOE :> es, State ParserScope :> es, Error String :> es, State AlexState :> es, State PreprocessorState :> es )}  {ConduitT (Located Token) Void (Eff es) } {>>=} {return}
 %lexer {(await >>=)} {Nothing}
 
 %errorhandlertype explist
 %error {parseError}
-%tokentype { Maybe Token }
+%tokentype { Maybe (Located Token) }
 
 %token
-    ident   { Just (Ident $$) }
-    typeName { Just (TTypeName $$) }
-    stringlit { Just (StringLiteral $$) }
-    constant  { Just (Constant $$) }
+    ident   { Just (L _ (Ident $$)) }
+    typeName { Just (L _ (TTypeName $$)) }
+    stringlit { Just (L _ (StringLiteral $$)) }
+    constant  { Just (L _ (Constant $$)) }
 
-    auto    { Just (Keyword Auto)  }
-    break   { Just (Keyword Break) }
-    case    { Just (Keyword Case) }
-    const   { Just (Keyword Const) }
-    continue{ Just (Keyword Continue) }
-    default { Just (Keyword Default) }
-    do      { Just (Keyword Do) }
-    else    { Just (Keyword Else) }
-    extern  { Just (Keyword Extern) }
-    enum    { Just (Keyword Enum) }
-    for     { Just (Keyword For) }
-    goto    { Just (Keyword Goto) }
-    if      { Just (Keyword If) }
-    inline  { Just (Keyword Inline) }
-    register{ Just (Keyword Register) }
-    restrict{ Just (Keyword Restrict) }
-    return  { Just (Keyword Return) }
-    sizeof  { Just (Keyword Sizeof) }
-    static  { Just (Keyword TStatic) }
-    struct  { Just (Keyword Struct) }
-    switch  { Just (Keyword Switch) }
-    typedef { Just (Keyword TypeDef) }
-    union   { Just (Keyword Union) }
-    volatile{ Just (Keyword Volatile) }
-    while   { Just (Keyword While) }
-    void    { Just (Keyword Void) }
-    char    { Just (Keyword TChar) }
-    short   { Just (Keyword TShort) }
-    int     { Just (Keyword TInt) }
-    long    { Just (Keyword TLong) }
-    float   { Just (Keyword TFloat) }
-    double  { Just (Keyword TDouble) }
-    signed  { Just (Keyword TSigned) }
-    unsigned{ Just (Keyword TUnsigned) }
-    uBool   { Just (Keyword TuBool) }
-    uComplex { Just (Keyword TuComplex) }
-    uImaginary { Just (Keyword TuImaginary) }
-    '{'     { Just (Punctuator LBrace) }
-    '}'     { Just (Punctuator RBrace) }
-    '('     { Just (Punctuator LParen) }
-    ')'     { Just (Punctuator RParen) }
-    '['     { Just (Punctuator LBrack) }
-    ']'     { Just (Punctuator RBrack) }
-    '->'    { Just (Punctuator Arrow)  }
-    '&'     { Just (Punctuator BitAnd) }
-    '|'     { Just (Punctuator BitOr)   }
-    '*'     { Just (Punctuator Times) }
-    '+'     { Just (Punctuator Plus) }
-    '-'     { Just (Punctuator Minus) }
-    '~'     { Just (Punctuator Compliment) }
-    '!'     { Just (Punctuator Not) }
-    '/'     { Just (Punctuator Divide) }
-    '%'     { Just (Punctuator Modulo) }
-    '<<'    { Just (Punctuator LShift) } 
-    '>>'    { Just (Punctuator RShift) } 
-    '<'     { Just (Punctuator Lt)     }
-    '<='    { Just (Punctuator Le)     }
-    '>'     { Just (Punctuator Gt)     }
-    '>='    { Just (Punctuator Ge)     }
-    '=='    { Just (Punctuator Eq)     }
-    '!='    { Just (Punctuator Neq)    }
-    '^'     { Just (Punctuator BitXor) }
-    '&&'    { Just (Punctuator LAnd)   }
-    '||'    { Just (Punctuator LOr)    }
-    ';'     { Just (Punctuator Semi)   }
-    '='     { Just (Punctuator Assign) }
-    ','     { Just (Punctuator Comma)  }
-    '.'     { Just (Punctuator Dot) }
-    ':'     { Just (Punctuator Colon)}
+    auto    { Just (L _ (Keyword Auto))  }
+    break   { Just (L _ (Keyword Break)) }
+    case    { Just (L _ (Keyword Case)) }
+    const   { Just (L _ (Keyword Const)) }
+    continue{ Just (L _ (Keyword Continue)) }
+    default { Just (L _ (Keyword Default)) }
+    do      { Just (L _ (Keyword Do)) }
+    else    { Just (L _ (Keyword Else)) }
+    extern  { Just (L _ (Keyword Extern)) }
+    enum    { Just (L _ (Keyword Enum)) }
+    for     { Just (L _ (Keyword For)) }
+    goto    { Just (L _ (Keyword Goto)) }
+    if      { Just (L _ (Keyword If)) }
+    inline  { Just (L _ (Keyword Inline)) }
+    register{ Just (L _ (Keyword Register)) }
+    restrict{ Just (L _ (Keyword Restrict)) }
+    return  { Just (L _ (Keyword Return)) }
+    sizeof  { Just (L _ (Keyword Sizeof)) }
+    static  { Just (L _ (Keyword TStatic)) }
+    struct  { Just (L _ (Keyword Struct)) }
+    switch  { Just (L _ (Keyword Switch)) }
+    typedef { Just (L _ (Keyword TypeDef)) }
+    union   { Just (L _ (Keyword Union)) }
+    volatile{ Just (L _ (Keyword Volatile)) }
+    while   { Just (L _ (Keyword While)) }
+    void    { Just (L _ (Keyword Void)) }
+    char    { Just (L _ (Keyword TChar)) }
+    short   { Just (L _ (Keyword TShort)) }
+    int     { Just (L _ (Keyword TInt)) }
+    long    { Just (L _ (Keyword TLong)) }
+    float   { Just (L _ (Keyword TFloat)) }
+    double  { Just (L _ (Keyword TDouble)) }
+    signed  { Just (L _ (Keyword TSigned)) }
+    unsigned{ Just (L _ (Keyword TUnsigned)) }
+    uBool   { Just (L _ (Keyword TuBool)) }
+    uComplex { Just (L _ (Keyword TuComplex)) }
+    uImaginary { Just (L _ (Keyword TuImaginary)) }
+    '{'     { Just (L _ (Punctuator LBrace)) }
+    '}'     { Just (L _ (Punctuator RBrace)) }
+    '('     { Just (L _ (Punctuator LParen)) }
+    ')'     { Just (L _ (Punctuator RParen)) }
+    '['     { Just (L _ (Punctuator LBrack)) }
+    ']'     { Just (L _ (Punctuator RBrack)) }
+    '->'    { Just (L _ (Punctuator Arrow))  }
+    '&'     { Just (L _ (Punctuator BitAnd)) }
+    '|'     { Just (L _ (Punctuator BitOr))   }
+    '*'     { Just (L _ (Punctuator Times)) }
+    '+'     { Just (L _ (Punctuator Plus)) }
+    '-'     { Just (L _ (Punctuator Minus)) }
+    '~'     { Just (L _ (Punctuator Compliment)) }
+    '!'     { Just (L _ (Punctuator Not)) }
+    '/'     { Just (L _ (Punctuator Divide)) }
+    '%'     { Just (L _ (Punctuator Modulo)) }
+    '<<'    { Just (L _ (Punctuator LShift)) } 
+    '>>'    { Just (L _ (Punctuator RShift)) } 
+    '<'     { Just (L _ (Punctuator Lt))     }
+    '<='    { Just (L _ (Punctuator Le))     }
+    '>'     { Just (L _ (Punctuator Gt))     }
+    '>='    { Just (L _ (Punctuator Ge))     }
+    '=='    { Just (L _ (Punctuator Eq))     }
+    '!='    { Just (L _ (Punctuator Neq))    }
+    '^'     { Just (L _ (Punctuator BitXor)) }
+    '&&'    { Just (L _ (Punctuator LAnd))   }
+    '||'    { Just (L _ (Punctuator LOr))    }
+    ';'     { Just (L _ (Punctuator Semi))   }
+    '='     { Just (L _ (Punctuator Assign)) }
+    ','     { Just (L _ (Punctuator Comma))  }
+    '.'     { Just (L _ (Punctuator Dot)) }
+    ':'     { Just (L _ (Punctuator Colon))}
 
-    '++'    { Just (Punctuator PlusPlus) }
-    '--'    { Just (Punctuator MinusMinus) }
-    '?'     { Just (Punctuator Question)  }
-    '...'   { Just (Punctuator Variadic)  }
-    '*='    { Just (Punctuator TimesAssign) }
-    '/='    { Just (Punctuator DivAssign) }
-    '%='    { Just (Punctuator ModAssign) }
-    '+='    { Just (Punctuator PlusAssign) }
-    '-='    { Just (Punctuator MinusAssign) }
-    '<<='   { Just (Punctuator LShiftAssign) }
-    '>>='   { Just (Punctuator RShiftAssign) }
-    '&='    { Just (Punctuator AndAssign) }
-    '^='    { Just (Punctuator XorAssign) }
-    '|='    { Just (Punctuator OrAssign) }
-    -- '#'     { Just (Punctuator Stringize) }
-    -- '##'    { Just (Punctuator TokenPaste) }
+    '++'    { Just (L _ (Punctuator PlusPlus)) }
+    '--'    { Just (L _ (Punctuator MinusMinus)) }
+    '?'     { Just (L _ (Punctuator Question))  }
+    '...'   { Just (L _ (Punctuator Variadic))  }
+    '*='    { Just (L _ (Punctuator TimesAssign)) }
+    '/='    { Just (L _ (Punctuator DivAssign)) }
+    '%='    { Just (L _ (Punctuator ModAssign)) }
+    '+='    { Just (L _ (Punctuator PlusAssign)) }
+    '-='    { Just (L _ (Punctuator MinusAssign)) }
+    '<<='   { Just (L _ (Punctuator LShiftAssign)) }
+    '>>='   { Just (L _ (Punctuator RShiftAssign)) }
+    '&='    { Just (L _ (Punctuator AndAssign)) }
+    '^='    { Just (L _ (Punctuator XorAssign)) }
+    '|='    { Just (L _ (Punctuator OrAssign)) }
+    -- '#'     { Just (L _ (Punctuator Stringize)) }
+    -- '##'    { Just (L _ (Punctuator TokenPaste)) }
 
 {-
 %left '||'
@@ -552,10 +553,10 @@ BlockItemList :: { [BlockItem Identifier] }
         -- declared in the preceeding declaration.
         -- In this case the lookahead needs to be replaced with a (TypeName i) token.
     : BlockItemList Declaration {%% 
-        (\lookahead -> do 
+        (\(lookahead :: Maybe (Located Token)) -> do 
             decl <- fmap ((:$1) . BDecl) (handleDeclaration $2)
             case lookahead of
-                Just i@(Ident _) ->  do
+                Just i@(L _ (Ident _)) ->  do
                     tok <- lift (checkToken i)
                     leftover tok
                 Just x -> leftover x
@@ -580,8 +581,8 @@ ExternalDeclaration :: { ExternDecl Identifier }
         (\lookahead -> do 
             decl <- fmap EDecl (handleDeclaration ($1))
             case lookahead of
-                Just i@(Ident _) ->  do
-                    tok <- lift (checkToken i)
+                Just i@(L _ (Ident _)) ->  do
+                    (tok :: Located Token) <- lift (checkToken i)
                     leftover tok
                 Just x -> leftover x
                 Nothing -> pure ()
@@ -634,19 +635,20 @@ handleDeclaration d@(Declaration specs initDeclarators) = do
     pure d
 
 
-parseError :: (Error String :> es, State ParserScope :> es) => (Maybe Token, [String]) -> ConduitT Token Void (Eff es) a
-parseError (t, tokens) = lift $ error $ "something failed :(, failed on token: \"" ++  show t ++ "\"possible tokens: " ++ show tokens  
+parseError :: (Error String :> es, State ParserScope :> es) => (Maybe (Located Token), [String]) -> ConduitT (Located Token) Void (Eff es) a
+parseError (Just (L span t), tokens) = lift $ error $ "Parsing failed on token: \"" ++ show t ++ "\" at " ++ show span ++ ". possible tokens: " ++ show tokens  
+parseError (Nothing, tokens) = lift $ error $ "Parsing failed at EOF"
 
 
-checkToken :: (State ParserScope :> es) => Token -> Eff es Token
-checkToken (Ident i) = do
+checkToken :: (State ParserScope :> es) => Located Token -> Eff es (Located Token)
+checkToken (L s (Ident i)) = do
         h:|_ <- get
-        pure $ case S.member i h of
+        pure $ L s $ case S.member i h of
             True -> TTypeName i
             False -> Ident i
 checkToken x = pure x 
 
-injectTypeNameTokens :: (State ParserScope :> es) => ConduitT Token Token (Eff es) ()
+injectTypeNameTokens :: (State ParserScope :> es) => ConduitT (Located Token) (Located Token) (Eff es) ()
 injectTypeNameTokens = mapMC $ checkToken
 }
 
