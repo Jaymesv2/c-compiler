@@ -160,9 +160,13 @@ test-suite tests
   type: exitcode-stdio-1.0
   main-is: Test.hs
   build-depends: 
-    , tasty
-    , tasty-hunit
-    , tasty-quickcheck
+    , HTF
+    --, tasty
+    --, tasty-hunit
+    --, tasty-quickcheck
+    --, QuickCheck
+    
     , compiler-lib
+  Build-tool-depends: HTF:htfpp
   --HUnit, QuickCheck, compiler-lib
   hs-source-dirs: tests

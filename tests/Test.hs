@@ -1,18 +1,12 @@
-module Main where
+{-# OPTIONS_GHC -F -pgmF htfpp #-}
+module Main ( main ) where
+-- How to do the tests
+-- https://hackage.haskell.org/package/HTF-0.15.0.2/docs/Test-Framework-Tutorial.html
+import Test.Framework
 
--- import BasicSum
-
-import Compiler.Parser
-import qualified System.Exit as Exit
-import Test.HUnit
-
-test1 :: Test
-test1 = TestCase (assertEqual "should return 3" 3 3)
-
-tests :: Test
-tests = TestList [TestLabel "test1" test1]
+-- Import modules defining HTF tests like this:
+--import {-@ HTF_TESTS @-} Compiler.Parser.SrcLoc
 
 main :: IO ()
-main = do
-    result <- runTestTT tests
-    if failures result > 0 then Exit.exitFailure else Exit.exitSuccess
+main = htfMain htf_importedTests -- all tests in modules imported via {-@ HTF_TESTS @-} are available in htf_importedTests
+
