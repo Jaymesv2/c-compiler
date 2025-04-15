@@ -388,24 +388,21 @@ parseTypeSpecifiers spcs = do
         go (a,b,c,d) (EnumType x)   = (a,b,x:c,d)
         go (a,b,c,d) (PrimType x)   = (a,b,c,x:d)
 
--- -- the primary type can always be determined by the first type
--- data CanonicalTypePrimary = CTPVoid | CTPInt | CTPFloat
--- data CanonicalType = CT {
---     hasLong :: [SrcLoc],
---     hasImaginary :: Maybe SrcLoc,
--- }
---                          signedness      ,  int
+
+-- Unpacking these might make sense but I'm not sure if that would make the size too large and make copying it too expensive
 data CanonicalNumeric = CanonicalNumeric {
-    cnSignedness :: Maybe (Bool, SrcSpan),
-    cnInt :: Maybe SrcSpan, -- int
-    cnChar :: Maybe SrcSpan, -- char
-    cnShort :: Maybe SrcSpan, -- short
-    cnLongs :: [SrcSpan],     -- long
-    cnFloat :: Maybe SrcSpan, -- float
-    cnDouble :: Maybe SrcSpan, -- double
-    cnComplex :: Maybe SrcSpan, -- complex
-    cnImaginary :: Maybe SrcSpan  -- imaginary
+    cnSignedness :: !(Maybe (Bool, SrcSpan)),
+    cnInt :: !(Maybe SrcSpan), -- int
+    cnChar :: !(Maybe SrcSpan), -- char
+    cnShort :: !(Maybe SrcSpan), -- short
+    cnLongs :: ![SrcSpan],     -- long
+    cnFloat :: !(Maybe SrcSpan), -- float
+    cnDouble :: !(Maybe SrcSpan), -- double
+    cnComplex :: !(Maybe SrcSpan), -- complex
+    cnImaginary :: !(Maybe SrcSpan)  -- imaginary
 }
+
+--makeLenses ''CanonicalNumeric
 
 canonicalNumericToCType :: Error String :> es => CanonicalNumeric -> Eff es (Either (SrcLoc, String) CType)
 canonicalNumericToCType CanonicalNumeric{cnSignedness,cnInt,cnChar,cnShort,cnLongs,cnFloat,cnDouble,cnComplex,cnImaginary} 
