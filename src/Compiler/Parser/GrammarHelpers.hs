@@ -35,6 +35,7 @@ import Control.Monad
 --import Data.Coerce
 import Compiler.Parser.SrcLoc
 import Control.Applicative
+import Control.Lens hiding (para)
 
 -- import Compiler.Parser.Tokens (Identifier)
 type Identifier = Text
@@ -391,32 +392,34 @@ parseTypeSpecifiers spcs = do
 
 -- Unpacking these might make sense but I'm not sure if that would make the size too large and make copying it too expensive
 data CanonicalNumeric = CanonicalNumeric {
-    cnSignedness :: !(Maybe (Bool, SrcSpan)),
-    cnInt :: !(Maybe SrcSpan), -- int
-    cnChar :: !(Maybe SrcSpan), -- char
-    cnShort :: !(Maybe SrcSpan), -- short
-    cnLongs :: ![SrcSpan],     -- long
-    cnFloat :: !(Maybe SrcSpan), -- float
-    cnDouble :: !(Maybe SrcSpan), -- double
-    cnComplex :: !(Maybe SrcSpan), -- complex
-    cnImaginary :: !(Maybe SrcSpan)  -- imaginary
+    _cnSignedness :: !(Maybe (Bool, SrcSpan)),
+    _cnInt :: !(Maybe SrcSpan), -- int
+    _cnChar :: !(Maybe SrcSpan), -- char
+    _cnShort :: !(Maybe SrcSpan), -- short
+    --_cnLongs :: ![SrcSpan],     -- long
+    _cnLongs :: !(Maybe (Either SrcSpan (SrcSpan, SrcSpan))),     -- long
+    _cnFloat :: !(Maybe SrcSpan), -- float
+    _cnDouble :: !(Maybe SrcSpan), -- double
+    _cnComplex :: !(Maybe SrcSpan), -- complex
+    _cnImaginary :: !(Maybe SrcSpan)  -- imaginary
 }
 
---makeLenses ''CanonicalNumeric
+makeLenses ''CanonicalNumeric
+
 
 canonicalNumericToCType :: Error String :> es => CanonicalNumeric -> Eff es (Either (SrcLoc, String) CType)
-canonicalNumericToCType CanonicalNumeric{cnSignedness,cnInt,cnChar,cnShort,cnLongs,cnFloat,cnDouble,cnComplex,cnImaginary} 
-    | isJust cnDouble || isJust cnFloat = do
+canonicalNumericToCType cn --CanonicalNumeric{cnSignedness,cnInt,cnChar,cnShort,cnLongs,cnFloat,cnDouble,cnComplex,cnImaginary} 
+    | isJust (cn^.cnDouble) || isJust (cn^.cnFloat) = do
         -- when (isJust cnSignedness) $ throwError ""
         -- when (isJust cnInt) $ throwError ""
         -- when (isJust cnShort) $ throwError ""
         -- when (isJust cnChar) $ throwError ""
         -- when (length cnLongs >= 2) $ throwError "" 
-        let complex = isJust cnComplex
-        case (cnFloat, cnDouble, cnLongs) of
-            (Just _floatSpan, Nothing, []) -> pure $ Right $ PrimTy $ CFloat complex
-            (Nothing, Just _doubleSpan, []) -> pure $ Right $ PrimTy $ CDouble complex
-            (Nothing, Just _doubleSpan, [_longSpan]) -> pure $ Right $ PrimTy $ CLongDouble complex
+        let complex = isJust (cn^.cnComplex)
+        Right . PrimTy <$> case (cn^.cnFloat, cn^.cnDouble, cn^.cnLongs) of
+            (Just _floatSpan, Nothing, Nothing) -> pure $ CFloat complex
+            (Nothing, Just _doubleSpan, Nothing) -> pure $ CDouble complex
+            (Nothing, Just _doubleSpan, Just (Left _longSpan)) -> pure $ CLongDouble complex
             _ -> error "invalid double type"
         -- otherwise it should be an int type
     | otherwise = do
@@ -425,98 +428,106 @@ canonicalNumericToCType CanonicalNumeric{cnSignedness,cnInt,cnChar,cnShort,cnLon
         -- when (isJust cnImaginary) $ throwError ""
         -- when (isJust cnComplex) $ throwError ""
         -- when (length cnLongs >= 3) $ throwError "" 
-        let sign = maybe True fst cnSignedness
-        case (cnInt, cnChar,cnShort,cnLongs) of
-            (Nothing, Just _charSpan, Nothing, []) -> pure $ Right $ PrimTy $ CChar sign
-            (_, Nothing, Just _shortSpann, []) -> pure $ Right $ PrimTy $ CShortInt sign
-            (Just _intSpan, Nothing, Nothing, []) -> pure $ Right $ PrimTy $ CInt sign
-            (_, Nothing,Nothing,[_longSpan]) -> pure $ Right $ PrimTy $ CLongInt sign
-            (_, Nothing,Nothing,[_longSpan1,_longSpan2]) -> pure $ Right $ PrimTy $ CLongLongInt sign
+        let sign = maybe True fst (cn^.cnSignedness)
+        Right . PrimTy  <$> case (cn^.cnInt, cn^.cnChar,cn^.cnShort,cn^.cnLongs) of
+            (Nothing, Just _charSpan, Nothing, Nothing) -> pure $ CChar sign
+            (_, Nothing, Just _shortSpann, Nothing) -> pure $  CShortInt sign
+            (Just _intSpan, Nothing, Nothing, Nothing) -> pure $ CInt sign
+            (_, Nothing,Nothing,Just (Left _longSpan)) -> pure $ CLongInt sign
+            (_, Nothing,Nothing,Just (Right (_longSpan1,_longSpan2 ))) -> pure  $ CLongLongInt sign
             _ -> error "invalid int type"
 
 -- Void and Bool are the only non numeric types and cannot have any other specifiers.
 -- writes warnings into the writer and 
 typeOfPrimitives :: Error String :> es => [Located PrimitiveTypes] -> Eff es (Either (SrcLoc, String) CType)
 typeOfPrimitives [] = error "zero primitive types"
-typeOfPrimitives ps@(L s p:_) = case p of
+typeOfPrimitives ps@(L _s p:_) = case p of
         -- fail to parse is there are any other ps
         PVoid -> pure $ Right $ PrimTy CVoid 
         PuBool -> pure $ Right $ PrimTy CBool
         _ -> canonicalizeNumeric ps >>= canonicalNumericToCType
 
+
 canonicalizeNumeric :: (Error String :> es) => [Located PrimitiveTypes] -> Eff es CanonicalNumeric
-canonicalizeNumeric = foldlM canonicalizeNumeric' (CanonicalNumeric Nothing Nothing Nothing Nothing [] Nothing Nothing Nothing Nothing)
---{cnSignedness=Nothing, cnInt=Nothing, cnChar=Nothing, cnShort=Nothing, cnLongs=[], cnFloat=Nothing, cnDouble=Nothing, cnComplex=Nothing, cnImaginary=Nothing}
+canonicalizeNumeric = foldlM canonicalizeNumeric' (CanonicalNumeric Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing)
 
 canonicalizeNumeric' :: (Error String :> es) => CanonicalNumeric -> Located PrimitiveTypes -> Eff es CanonicalNumeric
-canonicalizeNumeric' cn@CanonicalNumeric{cnSignedness,cnInt,cnChar,cnShort,cnLongs,cnFloat,cnDouble,cnComplex,cnImaginary} (L span tok) = let 
-    repeatError val = case val of
+canonicalizeNumeric' cn (L primSpan tok) = let 
+    repeatError :: (Show a, Error String :> es) => Getting (Maybe a) b (Maybe a) -> b -> Eff es ()
+    repeatError getter c = case c^.getter of
         Nothing -> pure ()
-        Just n -> throwError $ "cannot repeat `" ++  show tok ++ "` at " ++ show n ++ ", first `" ++ show tok ++ "` at " ++ show span ++ "."
+        Just n -> throwError $ "cannot repeat `" ++  show tok ++ "` at " ++ show n ++ ", first `" ++ show tok ++ "` at " ++ show primSpan ++ "."
 
-    --isIntType :: Eff es ()
-    notFloatType = do
-        when (isJust cnFloat) $ throwError $ "unexpected `" ++ show tok ++ "`"
-        when (isJust cnDouble) $ throwError ""
-        when (isJust cnImaginary) $ throwError ""
-        when (isJust cnComplex) $ throwError ""
-        when (length cnLongs >= 2) $ throwError "" 
+    notIntType :: Error String :> es => CanonicalNumeric -> Eff es ()
+    notIntType c = do
+        when (isJust (c^.cnSignedness)) $ throwError ""
+        when (isJust (c^.cnInt)) $ throwError ""
+        when (isJust (c^.cnShort)) $ throwError ""
+        when (isJust (c^.cnChar)) $ throwError ""
+        when (length (c^.cnLongs) >= 2) $ throwError "" 
 
-    notIntType = do
-        when (isJust cnSignedness) $ throwError ""
-        when (isJust cnInt) $ throwError ""
-        when (isJust cnShort) $ throwError ""
-        when (isJust cnChar) $ throwError ""
-        when (length cnLongs >= 2) $ throwError "" 
+    notFloatType :: Error String :> es => CanonicalNumeric -> Eff es ()
+    notFloatType c = do
+        when (isJust (c^.cnFloat)) $ throwError $ "unexpected `" ++ show tok ++ "`"
+        when (isJust (c^.cnDouble)) $ throwError ""
+        when (isJust (c^.cnImaginary)) $ throwError ""
+        when (isJust (c^.cnComplex)) $ throwError ""
+        when (length (c^.cnLongs) >= 2) $ throwError "" 
 
-    in case tok of
-    PVoid -> throwError "cannot have `void` in numeric type"
-    PuBool -> throwError "Cannot have `_Bool` in numeric type"
+    getConstrants :: Error String :> es => PrimitiveTypes -> Eff es CanonicalNumeric
+    getConstrants = \case
+        PVoid -> throwError "cannot have `void` in numeric type"
+        PuBool -> throwError "Cannot have `_Bool` in numeric type"
 
-    PChar -> do
-        repeatError cnChar
-        notFloatType
-        pure cn{cnChar=Just span}
-    PInt -> do
-        repeatError cnInt
-        notFloatType
-        pure cn{cnInt=Just span}
-    PShort -> do
-        repeatError cnShort
-        notFloatType
-        pure cn{cnShort=Just span}
-    PLong -> 
-        if  | isJust cnFloat -> throwError "`long` cannot be combined with `float`"
-            | length cnLongs >= 2 -> throwError "cannot have more than three `long`s"
-            | otherwise -> pure $ cn{cnLongs=span:cnLongs}
-    PSigned -> do
-        notFloatType
-        case cnSignedness of
-            Nothing -> pure cn{cnSignedness=Just (True,span)}
-            Just (True, _) -> pure cn -- emit warning here
-            Just (False, _) -> throwError ""
-    PUnsigned -> do
-        notFloatType
-        case cnSignedness of
-            Nothing -> pure cn{cnSignedness=Just (False,span)}
-            Just (False, _) -> pure cn -- emit warning here
-            Just (True, _) -> throwError ""
-    PFloat -> do
-        repeatError cnFloat
-        notIntType
-        pure cn{cnFloat=Just span}
-    PDouble -> do
-        repeatError cnDouble
-        notIntType
-        pure cn{cnDouble=Just span}
-    PuComplex -> do 
-        repeatError cnComplex
-        notIntType
-        pure cn{cnComplex=Just span}
-    PuImaginary -> do
-        repeatError cnImaginary
-        notIntType
-        pure cn{cnImaginary=Just span}
+        PChar -> do
+            repeatError cnChar cn
+            notFloatType cn
+            pure (cnChar ?~ primSpan $ cn)
+        PInt -> do
+            repeatError cnInt cn
+            notFloatType cn
+            pure (cnInt ?~ primSpan $ cn)
+        PShort -> do
+            repeatError cnShort cn
+            notFloatType cn
+            pure (cnShort ?~ primSpan $ cn)
+        PLong -> do
+            when (isJust (cn^.cnFloat)) $ throwError "`long` cannot be combined with `float`"
+            case cn^.cnLongs of
+                Nothing -> pure (cnLongs ?~ Left primSpan $ cn)
+                Just (Left l) -> pure (cnLongs ?~ Right (l,primSpan) $ cn)
+                Just (Right (_s1,_s2)) -> throwError "cannot have more than two `long` specifiers"
+        PSigned -> do
+            notFloatType cn
+            case cn^.cnSignedness of
+                Nothing -> pure (cnSignedness ?~ (True,primSpan) $ cn)
+                Just (True, _) -> pure cn -- emit warning here
+                Just (False, _) -> throwError ""
+        PUnsigned -> do
+            notFloatType cn
+            case cn^.cnSignedness of
+                Nothing -> pure (cnSignedness ?~ (False,primSpan) $ cn)
+                Just (False, _) -> pure cn -- emit warning here
+                Just (True, _) -> throwError ""
+        PFloat -> do
+            repeatError cnFloat cn
+            notIntType cn
+            pure (cnFloat ?~ primSpan $ cn)
+
+        PDouble -> do
+            repeatError cnDouble cn
+            notIntType cn
+            pure (cnDouble ?~ primSpan $ cn)
+        PuComplex -> do
+            repeatError cnComplex cn
+            notIntType cn
+            pure (cnComplex ?~ primSpan $ cn)
+        PuImaginary -> do
+            repeatError cnImaginary cn
+            notIntType cn
+            pure (cnImaginary ?~ primSpan $ cn)
+    
+    in getConstrants tok
 
 {-
     void
