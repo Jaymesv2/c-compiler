@@ -55,7 +55,13 @@ instance Monoid SrcSpan where
 
 -- I just took this from GHC because it seems like a better way to do it
 data GenLocated l e = L l e
-  deriving stock (Eq, Ord, Show, Functor, Foldable, Traversable)
+  deriving stock (Eq, Show, Functor, Foldable, Traversable)
+
+instance (Ord s, Ord a) => Ord (GenLocated s a) where
+    compare (L xspan x) (L yspan y) = case compare x y of
+        LT -> LT
+        GT -> GT
+        EQ -> compare xspan yspan
 
 type Located = GenLocated SrcSpan
 --type RealLocated = GenLocated RealSrcSpan

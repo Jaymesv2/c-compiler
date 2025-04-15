@@ -1,4 +1,4 @@
-{-# LANGUAGE TemplateHaskell, TemplateHaskellQuotes #-}
+{-# LANGUAGE TemplateHaskell, TemplateHaskellQuotes, MultiWayIf #-}
 module Compiler.Parser.GrammarHelpers  where
 
 import Compiler.Parser.ParseTree
@@ -11,28 +11,29 @@ import Data.Foldable
 import Effectful
 import Effectful.Error.Static
 import Effectful.State.Static.Local
-
+import Effectful.Writer.Dynamic
 
 import Data.Set qualified as Set 
 import Data.Set (Set)
-import Data.Sequence qualified as Seq
-import Data.Sequence (Seq)
+--import Data.Sequence qualified as Seq
+--import Data.Sequence (Seq)
 import Data.Map qualified as M
 import Data.Map (Map)
-import Data.Text qualified as T
+--import Data.Text qualified as T
 import Data.Text (Text)
-import Data.List.NonEmpty ( NonEmpty(..), (<|) )
-import Data.List.NonEmpty qualified as N
+import Data.Bifunctor
+--import Data.List.NonEmpty ( NonEmpty(..), (<|) )
+--import Data.List.NonEmpty qualified as N
 import Data.List qualified as L
-import Data.List (uncons)
+--import Data.List (uncons)
 import Data.Maybe
 import Data.Either
 
 import Data.Functor.Foldable
 import Data.Functor
 import Control.Monad
-import Data.Coerce
-
+--import Data.Coerce
+import Compiler.Parser.SrcLoc
 import Control.Applicative
 
 -- import Compiler.Parser.Tokens (Identifier)
@@ -294,9 +295,14 @@ qualToQualifiers TQVolatile = volatileTypeQualifier
 foldQualifiers :: [TypeQualifier] -> TypeQualifiers
 foldQualifiers = foldMap qualToQualifiers
 
+
 -- parseTopLevelDeclaration :: Declaration i -> [(i, CType, Initializer i)]
 -- parseTopLevelDeclaration (Declaration ) =error "" 
 
+
+
+
+--collectDeclSpecifiers :: (Error String :> es) => [DeclarationSpecifiers i] -> Eff es ()
 -- TODO: implement warnings 
 extractDeclSpecifiers :: (Error String :> es) => [DeclarationSpecifiers i] -> Eff es (Maybe StorageClassSpecifier, [TypeSpecifier i], TypeQualifiers, Maybe FunctionSpecifier)
 extractDeclSpecifiers specs = 
@@ -318,12 +324,8 @@ extractDeclSpecifiers specs =
         -- should report warning about 
         --interpretTypQuals :: [TypeQualifier] -> Either String TypeQualifiers
         interpretTypQuals = pure . foldMap qualToQualifiers
-
         (storSpcs, typSpcs, typQuals, funcSpecs) = foldl' declSpecSplitter ([], [], [], []) specs
 
-        {- declSpecSplitter :: ([StorageClassSpecifier], [TypeSpecifier i], [TypeQualifier], [FunctionSpecifier])  
-            -> DeclarationSpecifiers i 
-            -> ([StorageClassSpecifier], [TypeSpecifier i], [TypeQualifier], [FunctionSpecifier]) -}
         declSpecSplitter (a,b,c,d) x = case x of
             DSStorageSpec storageClassSpec -> (storageClassSpec:a,b,c,d)
             DSTypeSpec typeSpec -> (a, typeSpec:b, c, d) 
@@ -331,15 +333,41 @@ extractDeclSpecifiers specs =
             DSFuncSpec funcSpec -> (a,b,c,funcSpec:d)
 
 
+-- should probably make this tail recursive
+-- splitDeclarationSpecifiers :: [Located (DeclarationSpecifiers i)] -> ([Located (SpecifierQualifier i)], [Located (Either StorageClassSpecifier FunctionSpecifier)])
+-- splitDeclarationSpecifiers (L s (DSStorageSpec spec):xs) = second (L s (Left spec):) $ splitDeclarationSpecifiers xs
+-- splitDeclarationSpecifiers (L s (DSTypeSpec spec):xs) = first (L s (Right spec):) $ splitDeclarationSpecifiers xs
+-- splitDeclarationSpecifiers (L s (DSTypeQual qual):xs) = first (L s (Left qual):) $ splitDeclarationSpecifiers xs
+-- splitDeclarationSpecifiers (L s (DSFuncSpec spec):xs) = second (L s (Right spec):) $ splitDeclarationSpecifiers xs
+-- splitDeclarationSpecifiers [] = ([],[])
+--
+
+
+
+-- parseTypeSpecifiers :: (Error String :> es) => [Located (TypeSpecifier i)] -> Eff es CType
+-- parseTypeSpecifiers spcs = do
+--     case spcs of
+--         [] -> error ""
+--         [L _ (StructType s)] -> error ""
+--         (L _ (StructType s):_) -> error ""
+--         [L _ (EnumType s)] -> error ""
+--         ( L _ (EnumType s):_:_) -> error ""
+--         [L _ (IdentType s)] -> error ""
+--         ( L _ (IdentType s):_) -> error ""
+--         -- this should ONLY contain primitive types
+--         xs -> error ""
+--
+--         --[L _ (IdentType s)] -> error ""
+--     where
+        
 
 parseTypeSpecifiers :: (Error String :> es) => [TypeSpecifier i] -> Eff es CType
 parseTypeSpecifiers spcs = do
-
-    unless (mods == (prims,0,0,0,0,0)) (throwError "modifiers are unimplemented")
+    --unless (mods == (prims,0,0,0,0,0)) (throwError "modifiers are unimplemented")
     unless (null structs) (throwError "unimplemented")
     unless (null enums) (throwError "unimplemented")
     unless (null idents) (throwError "unimplemented")
-
+    unless (signeds /= 0 && unsigneds /= 0) (throwError "cannot have both `signed` and `unsigned`")
     case prims of 
         [PVoid] -> pure $ PrimTy CVoid
         [PuBool] -> pure $ PrimTy CBool
@@ -352,33 +380,150 @@ parseTypeSpecifiers spcs = do
 
     where   
 
-        (idents, structs, enums, mods@(prims,signeds, unsigneds, shorts, longs, complexs)) = L.foldl' partitionPrims ([], 0,0,0,0,0) <$> L.foldl' go ([],[],[],[]) spcs
+        --(idents, structs, enums, mods@(prims,signeds, unsigneds, shorts, longs, complexs)) = L.foldl' partitionPrims ([], 0,0,0,0,0) <$> L.foldl' go ([],[],[],[]) spcs
+        (idents, structs, enums, mods@(prims,signeds, unsigneds, shorts, longs, complexs)) = L.foldl' (error "") ([], 0,0,0,0,0) <$> L.foldl' go ([],[],[],[]) spcs
 
         go (a,b,c,d) (IdentType x)  = (x:a,b,c,d)
         go (a,b,c,d) (StructType x) = (a,x:b,c,d)
         go (a,b,c,d) (EnumType x)   = (a,b,x:c,d)
         go (a,b,c,d) (PrimType x)   = (a,b,c,x:d)
-        
 
-        -- this function is dumb :/
-        partitionPrims :: ([PrimitiveTypes],Int,Int,Int,Int,Int) -> PrimitiveTypes -> ([PrimitiveTypes], Int,Int,Int,Int,Int)
-        partitionPrims (xs,a,b,c,d,e) PVoid        = (PVoid:xs,a,b,c,d,e) 
-        partitionPrims (xs,a,b,c,d,e) PChar        = (PChar:xs,a,b,c,d,e) 
-        partitionPrims (xs,a,b,c,d,e) PInt         = (PInt:xs,a,b,c,d,e) 
-        partitionPrims (xs,a,b,c,d,e) PFloat       = (PFloat:xs,a,b,c,d,e) 
-        partitionPrims (xs,a,b,c,d,e) PDouble      = (PDouble:xs,a,b,c,d,e) 
-        partitionPrims (xs,a,b,c,d,e) PuBool       = (PuBool:xs,a,b,c,d,e) 
-        partitionPrims (xs,a,b,c,d,e) PShort       = (xs,a,b,c+1,d,e) 
-        partitionPrims (xs,a,b,c,d,e) PLong        = (xs,a,b,c,d+1,e) 
-        partitionPrims (xs,a,b,c,d,e) PSigned      = (xs,a+1,b,c,d,e) 
-        partitionPrims (xs,a,b,c,d,e) PUnsigned    = (xs,a,b+1,c,d,e) 
-        partitionPrims (xs,a,b,c,d,e) PuComplex    = (xs,a,b,c,d,e+1) 
-        partitionPrims (xs,a,b,c,d,e) PuImaginary  = (xs,a,b,c,d,e+1) 
+-- -- the primary type can always be determined by the first type
+-- data CanonicalTypePrimary = CTPVoid | CTPInt | CTPFloat
+-- data CanonicalType = CT {
+--     hasLong :: [SrcLoc],
+--     hasImaginary :: Maybe SrcLoc,
+-- }
+--                          signedness      ,  int
+data CanonicalNumeric = CanonicalNumeric {
+    cnSignedness :: Maybe (Bool, SrcSpan),
+    cnInt :: Maybe SrcSpan, -- int
+    cnChar :: Maybe SrcSpan, -- char
+    cnShort :: Maybe SrcSpan, -- short
+    cnLongs :: [SrcSpan],     -- long
+    cnFloat :: Maybe SrcSpan, -- float
+    cnDouble :: Maybe SrcSpan, -- double
+    cnComplex :: Maybe SrcSpan, -- complex
+    cnImaginary :: Maybe SrcSpan  -- imaginary
+}
 
+canonicalNumericToCType :: Error String :> es => CanonicalNumeric -> Eff es (Either (SrcLoc, String) CType)
+canonicalNumericToCType CanonicalNumeric{cnSignedness,cnInt,cnChar,cnShort,cnLongs,cnFloat,cnDouble,cnComplex,cnImaginary} 
+    | isJust cnDouble || isJust cnFloat = do
+        -- when (isJust cnSignedness) $ throwError ""
+        -- when (isJust cnInt) $ throwError ""
+        -- when (isJust cnShort) $ throwError ""
+        -- when (isJust cnChar) $ throwError ""
+        -- when (length cnLongs >= 2) $ throwError "" 
+        let complex = isJust cnComplex
+        case (cnFloat, cnDouble, cnLongs) of
+            (Just _floatSpan, Nothing, []) -> pure $ Right $ PrimTy $ CFloat complex
+            (Nothing, Just _doubleSpan, []) -> pure $ Right $ PrimTy $ CDouble complex
+            (Nothing, Just _doubleSpan, [_longSpan]) -> pure $ Right $ PrimTy $ CLongDouble complex
+            _ -> error "invalid double type"
+        -- otherwise it should be an int type
+    | otherwise = do
+        -- when (isJust cnFloat) $ throwError ""
+        -- when (isJust cnDouble) $ throwError ""
+        -- when (isJust cnImaginary) $ throwError ""
+        -- when (isJust cnComplex) $ throwError ""
+        -- when (length cnLongs >= 3) $ throwError "" 
+        let sign = maybe True fst cnSignedness
+        case (cnInt, cnChar,cnShort,cnLongs) of
+            (Nothing, Just _charSpan, Nothing, []) -> pure $ Right $ PrimTy $ CChar sign
+            (_, Nothing, Just _shortSpann, []) -> pure $ Right $ PrimTy $ CShortInt sign
+            (Just _intSpan, Nothing, Nothing, []) -> pure $ Right $ PrimTy $ CInt sign
+            (_, Nothing,Nothing,[_longSpan]) -> pure $ Right $ PrimTy $ CLongInt sign
+            (_, Nothing,Nothing,[_longSpan1,_longSpan2]) -> pure $ Right $ PrimTy $ CLongLongInt sign
+            _ -> error "invalid int type"
 
+-- Void and Bool are the only non numeric types and cannot have any other specifiers.
+-- writes warnings into the writer and 
+typeOfPrimitives :: Error String :> es => [Located PrimitiveTypes] -> Eff es (Either (SrcLoc, String) CType)
+typeOfPrimitives [] = error "zero primitive types"
+typeOfPrimitives ps@(L s p:_) = case p of
+        -- fail to parse is there are any other ps
+        PVoid -> pure $ Right $ PrimTy CVoid 
+        PuBool -> pure $ Right $ PrimTy CBool
+        _ -> canonicalizeNumeric ps >>= canonicalNumericToCType
+
+canonicalizeNumeric :: (Error String :> es) => [Located PrimitiveTypes] -> Eff es CanonicalNumeric
+canonicalizeNumeric = foldlM canonicalizeNumeric' (CanonicalNumeric Nothing Nothing Nothing Nothing [] Nothing Nothing Nothing Nothing)
+--{cnSignedness=Nothing, cnInt=Nothing, cnChar=Nothing, cnShort=Nothing, cnLongs=[], cnFloat=Nothing, cnDouble=Nothing, cnComplex=Nothing, cnImaginary=Nothing}
+
+canonicalizeNumeric' :: (Error String :> es) => CanonicalNumeric -> Located PrimitiveTypes -> Eff es CanonicalNumeric
+canonicalizeNumeric' cn@CanonicalNumeric{cnSignedness,cnInt,cnChar,cnShort,cnLongs,cnFloat,cnDouble,cnComplex,cnImaginary} (L span tok) = let 
+    repeatError val = case val of
+        Nothing -> pure ()
+        Just n -> throwError $ "cannot repeat `" ++  show tok ++ "` at " ++ show n ++ ", first `" ++ show tok ++ "` at " ++ show span ++ "."
+
+    --isIntType :: Eff es ()
+    notFloatType = do
+        when (isJust cnFloat) $ throwError $ "unexpected `" ++ show tok ++ "`"
+        when (isJust cnDouble) $ throwError ""
+        when (isJust cnImaginary) $ throwError ""
+        when (isJust cnComplex) $ throwError ""
+        when (length cnLongs >= 2) $ throwError "" 
+
+    notIntType = do
+        when (isJust cnSignedness) $ throwError ""
+        when (isJust cnInt) $ throwError ""
+        when (isJust cnShort) $ throwError ""
+        when (isJust cnChar) $ throwError ""
+        when (length cnLongs >= 2) $ throwError "" 
+
+    in case tok of
+    PVoid -> throwError "cannot have `void` in numeric type"
+    PuBool -> throwError "Cannot have `_Bool` in numeric type"
+
+    PChar -> do
+        repeatError cnChar
+        notFloatType
+        pure cn{cnChar=Just span}
+    PInt -> do
+        repeatError cnInt
+        notFloatType
+        pure cn{cnInt=Just span}
+    PShort -> do
+        repeatError cnShort
+        notFloatType
+        pure cn{cnShort=Just span}
+    PLong -> 
+        if  | isJust cnFloat -> throwError "`long` cannot be combined with `float`"
+            | length cnLongs >= 2 -> throwError "cannot have more than three `long`s"
+            | otherwise -> pure $ cn{cnLongs=span:cnLongs}
+    PSigned -> do
+        notFloatType
+        case cnSignedness of
+            Nothing -> pure cn{cnSignedness=Just (True,span)}
+            Just (True, _) -> pure cn -- emit warning here
+            Just (False, _) -> throwError ""
+    PUnsigned -> do
+        notFloatType
+        case cnSignedness of
+            Nothing -> pure cn{cnSignedness=Just (False,span)}
+            Just (False, _) -> pure cn -- emit warning here
+            Just (True, _) -> throwError ""
+    PFloat -> do
+        repeatError cnFloat
+        notIntType
+        pure cn{cnFloat=Just span}
+    PDouble -> do
+        repeatError cnDouble
+        notIntType
+        pure cn{cnDouble=Just span}
+    PuComplex -> do 
+        repeatError cnComplex
+        notIntType
+        pure cn{cnComplex=Just span}
+    PuImaginary -> do
+        repeatError cnImaginary
+        notIntType
+        pure cn{cnImaginary=Just span}
 
 {-
     void
+
     char
     signed char
     unsigned char
