@@ -301,95 +301,6 @@ foldQualifiers = foldMap qualToQualifiers
 -- parseTopLevelDeclaration (Declaration ) =error "" 
 
 
-
-
---collectDeclSpecifiers :: (Error String :> es) => [DeclarationSpecifiers i] -> Eff es ()
--- TODO: implement warnings 
-extractDeclSpecifiers :: (Error String :> es) => [DeclarationSpecifiers i] -> Eff es (Maybe StorageClassSpecifier, [TypeSpecifier i], TypeQualifiers, Maybe FunctionSpecifier)
-extractDeclSpecifiers specs = 
-        (,,,) 
-            <$> atMostOne storSpcs 
-            <*> pure typSpcs
-            <*> interpretTypQuals typQuals
-            <*> atMostOne funcSpecs
-
-    where
-        --atMostOne :: [a] -> Either String (Maybe a)
-        atMostOne [] = pure Nothing
-        atMostOne [x] = pure (Just x)
-        atMostOne _ = throwError "too many values provided"
-
-        --interpretTypeSpecs :: [TypeSpecifier i] -> Either DeclaratorParseError CType
-        --interpretTypeSpecs _ = Left (error "")
-
-        -- should report warning about 
-        --interpretTypQuals :: [TypeQualifier] -> Either String TypeQualifiers
-        interpretTypQuals = pure . foldMap qualToQualifiers
-        (storSpcs, typSpcs, typQuals, funcSpecs) = foldl' declSpecSplitter ([], [], [], []) specs
-
-        declSpecSplitter (a,b,c,d) x = case x of
-            DSStorageSpec storageClassSpec -> (storageClassSpec:a,b,c,d)
-            DSTypeSpec typeSpec -> (a, typeSpec:b, c, d) 
-            DSTypeQual typeQual -> (a,b,typeQual:c,d)
-            DSFuncSpec funcSpec -> (a,b,c,funcSpec:d)
-
-
--- should probably make this tail recursive
--- splitDeclarationSpecifiers :: [Located (DeclarationSpecifiers i)] -> ([Located (SpecifierQualifier i)], [Located (Either StorageClassSpecifier FunctionSpecifier)])
--- splitDeclarationSpecifiers (L s (DSStorageSpec spec):xs) = second (L s (Left spec):) $ splitDeclarationSpecifiers xs
--- splitDeclarationSpecifiers (L s (DSTypeSpec spec):xs) = first (L s (Right spec):) $ splitDeclarationSpecifiers xs
--- splitDeclarationSpecifiers (L s (DSTypeQual qual):xs) = first (L s (Left qual):) $ splitDeclarationSpecifiers xs
--- splitDeclarationSpecifiers (L s (DSFuncSpec spec):xs) = second (L s (Right spec):) $ splitDeclarationSpecifiers xs
--- splitDeclarationSpecifiers [] = ([],[])
---
-
-
-
--- parseTypeSpecifiers :: (Error String :> es) => [Located (TypeSpecifier i)] -> Eff es CType
--- parseTypeSpecifiers spcs = do
---     case spcs of
---         [] -> error ""
---         [L _ (StructType s)] -> error ""
---         (L _ (StructType s):_) -> error ""
---         [L _ (EnumType s)] -> error ""
---         ( L _ (EnumType s):_:_) -> error ""
---         [L _ (IdentType s)] -> error ""
---         ( L _ (IdentType s):_) -> error ""
---         -- this should ONLY contain primitive types
---         xs -> error ""
---
---         --[L _ (IdentType s)] -> error ""
---     where
-        
-
-parseTypeSpecifiers :: (Error String :> es) => [TypeSpecifier i] -> Eff es CType
-parseTypeSpecifiers spcs = do
-    --unless (mods == (prims,0,0,0,0,0)) (throwError "modifiers are unimplemented")
-    unless (null structs) (throwError "unimplemented")
-    unless (null enums) (throwError "unimplemented")
-    unless (null idents) (throwError "unimplemented")
-    unless (signeds /= 0 && unsigneds /= 0) (throwError "cannot have both `signed` and `unsigned`")
-    case prims of 
-        [PVoid] -> pure $ PrimTy CVoid
-        [PuBool] -> pure $ PrimTy CBool
-        [PInt] -> pure $ PrimTy $ CInt True
-        [PChar] -> pure $ PrimTy $ CChar True
-        [PFloat] -> pure $ PrimTy $ CFloat False
-        [PDouble] -> pure $ PrimTy $ CDouble False
-        _ -> throwError "unimplemented"
-
-
-    where   
-
-        --(idents, structs, enums, mods@(prims,signeds, unsigneds, shorts, longs, complexs)) = L.foldl' partitionPrims ([], 0,0,0,0,0) <$> L.foldl' go ([],[],[],[]) spcs
-        (idents, structs, enums, mods@(prims,signeds, unsigneds, shorts, longs, complexs)) = L.foldl' (error "") ([], 0,0,0,0,0) <$> L.foldl' go ([],[],[],[]) spcs
-
-        go (a,b,c,d) (IdentType x)  = (x:a,b,c,d)
-        go (a,b,c,d) (StructType x) = (a,x:b,c,d)
-        go (a,b,c,d) (EnumType x)   = (a,b,x:c,d)
-        go (a,b,c,d) (PrimType x)   = (a,b,c,x:d)
-
-
 -- Unpacking these might make sense but I'm not sure if that would make the size too large and make copying it too expensive
 data CanonicalNumeric = CanonicalNumeric {
     _cnSignedness :: !(Maybe (Bool, SrcSpan)),
@@ -406,8 +317,55 @@ data CanonicalNumeric = CanonicalNumeric {
 
 makeLenses ''CanonicalNumeric
 
+--collectDeclSpecifiers :: (Error String :> es) => [DeclarationSpecifiers i] -> Eff es ()
+-- TODO: implement warnings 
+extractDeclSpecifiers :: (Error String :> es) => [Located (DeclarationSpecifiers i)] -> Eff es (Maybe (Located StorageClassSpecifier), CType, TypeQualifiers, Maybe (Located FunctionSpecifier))
+extractDeclSpecifiers specs = 
+        (,,,) 
+            <$> atMostOne storSpcs 
+            <*> parseTypeSpecifiers typSpcs
+            <*> interpretTypQuals typQuals
+            <*> atMostOne funcSpecs
+    where
+        atMostOne [] = pure Nothing
+        atMostOne [x] = pure (Just x)
+        atMostOne _ = throwError "too many values provided"
 
-canonicalNumericToCType :: Error String :> es => CanonicalNumeric -> Eff es (Either (SrcLoc, String) CType)
+        interpretTypQuals :: [Located TypeQualifier] -> Eff es TypeQualifiers
+        interpretTypQuals = pure . foldMap (qualToQualifiers . (\(L _ x) -> x))
+
+        (storSpcs, typSpcs, typQuals, funcSpecs) = (\(a,b,c,d) -> (reverse a, reverse b, reverse c, reverse d)) $ foldl' declSpecSplitter ([], [], [], []) specs
+        declSpecSplitter (a,b,c,d) (L s x) = case x of
+            DSStorageSpec storageClassSpec -> (L s storageClassSpec:a,b,c,d)
+            DSTypeSpec typeSpec -> (a, L s typeSpec:b, c, d) 
+            DSTypeQual typeQual -> (a,b,L s typeQual:c,d)
+            DSFuncSpec funcSpec -> (a,b,c,L s funcSpec:d)
+
+
+
+
+-- simple parse
+parseTypeSpecifiers :: (Error String :> es) => [Located (TypeSpecifier i)] -> Eff es CType
+parseTypeSpecifiers spcs = do
+    case spcs of
+        [] -> throwError ""
+        (L s (IdentType x):xs) -> error "identifier types are unimplemented"
+        (L s (StructType x):xs) -> error "struct types are unimplemented"
+        (L s (EnumType x):xs) -> error "enums are unimplemented"
+        (L s (PrimType PVoid):xs) -> pure $ PrimTy CVoid
+        (L s (PrimType PuBool):xs) -> pure $ PrimTy CBool
+        -- if its none of these then it must be a numeric type
+        _ -> canonicalizeNumeric spcs >>= canonicalNumericToCType
+
+        --(idents, structs, enums, mods@(prims,signeds, unsigneds, shorts, longs, complexs)) = L.foldl' partitionPrims ([], 0,0,0,0,0) <$> L.foldl' go ([],[],[],[]) spcs
+
+
+
+
+canonicalizeNumeric :: (Error String :> es) => [Located (TypeSpecifier i)] -> Eff es CanonicalNumeric
+canonicalizeNumeric = foldlM canonicalizeNumeric' (CanonicalNumeric Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing)
+
+canonicalNumericToCType :: Error String :> es => CanonicalNumeric -> Eff es CType
 canonicalNumericToCType cn --CanonicalNumeric{cnSignedness,cnInt,cnChar,cnShort,cnLongs,cnFloat,cnDouble,cnComplex,cnImaginary} 
     | isJust (cn^.cnDouble) || isJust (cn^.cnFloat) = do
         -- when (isJust cnSignedness) $ throwError ""
@@ -416,7 +374,7 @@ canonicalNumericToCType cn --CanonicalNumeric{cnSignedness,cnInt,cnChar,cnShort,
         -- when (isJust cnChar) $ throwError ""
         -- when (length cnLongs >= 2) $ throwError "" 
         let complex = isJust (cn^.cnComplex)
-        Right . PrimTy <$> case (cn^.cnFloat, cn^.cnDouble, cn^.cnLongs) of
+        PrimTy <$> case (cn^.cnFloat, cn^.cnDouble, cn^.cnLongs) of
             (Just _floatSpan, Nothing, Nothing) -> pure $ CFloat complex
             (Nothing, Just _doubleSpan, Nothing) -> pure $ CDouble complex
             (Nothing, Just _doubleSpan, Just (Left _longSpan)) -> pure $ CLongDouble complex
@@ -429,7 +387,7 @@ canonicalNumericToCType cn --CanonicalNumeric{cnSignedness,cnInt,cnChar,cnShort,
         -- when (isJust cnComplex) $ throwError ""
         -- when (length cnLongs >= 3) $ throwError "" 
         let sign = maybe True fst (cn^.cnSignedness)
-        Right . PrimTy  <$> case (cn^.cnInt, cn^.cnChar,cn^.cnShort,cn^.cnLongs) of
+        PrimTy  <$> case (cn^.cnInt, cn^.cnChar,cn^.cnShort,cn^.cnLongs) of
             (Nothing, Just _charSpan, Nothing, Nothing) -> pure $ CChar sign
             (_, Nothing, Just _shortSpann, Nothing) -> pure $  CShortInt sign
             (Just _intSpan, Nothing, Nothing, Nothing) -> pure $ CInt sign
@@ -437,26 +395,12 @@ canonicalNumericToCType cn --CanonicalNumeric{cnSignedness,cnInt,cnChar,cnShort,
             (_, Nothing,Nothing,Just (Right (_longSpan1,_longSpan2 ))) -> pure  $ CLongLongInt sign
             _ -> error "invalid int type"
 
--- Void and Bool are the only non numeric types and cannot have any other specifiers.
--- writes warnings into the writer and 
-typeOfPrimitives :: Error String :> es => [Located PrimitiveTypes] -> Eff es (Either (SrcLoc, String) CType)
-typeOfPrimitives [] = error "zero primitive types"
-typeOfPrimitives ps@(L _s p:_) = case p of
-        -- fail to parse is there are any other ps
-        PVoid -> pure $ Right $ PrimTy CVoid 
-        PuBool -> pure $ Right $ PrimTy CBool
-        _ -> canonicalizeNumeric ps >>= canonicalNumericToCType
-
-
-canonicalizeNumeric :: (Error String :> es) => [Located PrimitiveTypes] -> Eff es CanonicalNumeric
-canonicalizeNumeric = foldlM canonicalizeNumeric' (CanonicalNumeric Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing)
-
-canonicalizeNumeric' :: (Error String :> es) => CanonicalNumeric -> Located PrimitiveTypes -> Eff es CanonicalNumeric
+canonicalizeNumeric' :: (Error String :> es) => CanonicalNumeric -> Located (TypeSpecifier i) -> Eff es CanonicalNumeric
 canonicalizeNumeric' cn (L primSpan tok) = let 
     repeatError :: (Show a, Error String :> es) => Getting (Maybe a) b (Maybe a) -> b -> Eff es ()
     repeatError getter c = case c^.getter of
         Nothing -> pure ()
-        Just n -> throwError $ "cannot repeat `" ++  show tok ++ "` at " ++ show n ++ ", first `" ++ show tok ++ "` at " ++ show primSpan ++ "."
+        Just n -> throwError $ "repeat type specifier not allowed at " ++ show n --throwError $ "cannot repeat  at " ++ show n ++ ", first `" ++ show tok ++ "` at " ++ show primSpan ++ "."
 
     notIntType :: Error String :> es => CanonicalNumeric -> Eff es ()
     notIntType c = do
@@ -468,14 +412,14 @@ canonicalizeNumeric' cn (L primSpan tok) = let
 
     notFloatType :: Error String :> es => CanonicalNumeric -> Eff es ()
     notFloatType c = do
-        when (isJust (c^.cnFloat)) $ throwError $ "unexpected `" ++ show tok ++ "`"
+        when (isJust (c^.cnFloat)) $ throwError ""
         when (isJust (c^.cnDouble)) $ throwError ""
         when (isJust (c^.cnImaginary)) $ throwError ""
         when (isJust (c^.cnComplex)) $ throwError ""
         when (length (c^.cnLongs) >= 2) $ throwError "" 
-
-    getConstrants :: Error String :> es => PrimitiveTypes -> Eff es CanonicalNumeric
-    getConstrants = \case
+    
+    getConstraints :: Error String :> es => PrimitiveTypes -> Eff es CanonicalNumeric
+    getConstraints = \case
         PVoid -> throwError "cannot have `void` in numeric type"
         PuBool -> throwError "Cannot have `_Bool` in numeric type"
 
@@ -527,7 +471,9 @@ canonicalizeNumeric' cn (L primSpan tok) = let
             notIntType cn
             pure (cnImaginary ?~ primSpan $ cn)
     
-    in getConstrants tok
+    in case tok of 
+        PrimType p -> getConstraints p
+        i -> throwError "encountered non numeric type specifier while parsing a numeric type"
 
 {-
     void
@@ -561,6 +507,8 @@ canonicalizeNumeric' cn (L primSpan tok) = let
     typedef name
 -}
 
+
+{-
 parseTypeName :: (Error String :> es) => TypeName i -> Eff es CType
 parseTypeName (TypeName specquals absdecl) = do
     let (quals', specs') = partitionEithers specquals
@@ -597,9 +545,6 @@ parseDeclaration (Declaration specifiers initDecls) = do
                         pure (vid, c, init') 
                         --pure (oid, c tspc, init') 
                     ) initDecls $> []
-
-
-
 
 
 parseDeclarator :: (Error String :> es, State ParserState :> es) => Declarator i -> Eff es (i, CType -> CType)
@@ -663,3 +608,4 @@ absDeclAlg (ArrayF _ _) = error ""
 absDeclAlg (VarArrayF _) = error ""
 absDeclAlg (ParensF _ _) = error ""
 
+ -}
