@@ -9,7 +9,7 @@ import Compiler.Parser.ParseTree
 import Compiler.Parser.Tokens
 import Compiler.Parser (Identifier)
 import Compiler.Parser.SrcLoc
--- import Compiler.Parser.GrammarHelpers
+--import Compiler.Parser.GrammarHelpers
 
 import Effectful
 import Effectful.Error.Static
@@ -36,97 +36,103 @@ import Control.Monad
 %tokentype { Maybe (Located Token) }
 
 %token
-    ident   { Just (L _ (Ident $$)) }
-    typeName { Just (L _ (TTypeName $$)) }
-    stringlit { Just (L _ (StringLiteral $$)) }
-    constant  { Just (L _ (Constant $$)) }
+    -- ident   { Just (L _ (Ident $$)) }
+    -- typeName { Just (L _ (TTypeName $$)) }
+    -- stringlit { Just (L _ (StringLiteral $$)) }
+    -- constant  { Just (L _ (Constant $$)) }
 
-    auto    { Just (L _ (Keyword Auto))  }
-    break   { Just (L _ (Keyword Break)) }
-    case    { Just (L _ (Keyword Case)) }
-    const   { Just (L _ (Keyword Const)) }
-    continue{ Just (L _ (Keyword Continue)) }
-    default { Just (L _ (Keyword Default)) }
-    do      { Just (L _ (Keyword Do)) }
-    else    { Just (L _ (Keyword Else)) }
-    extern  { Just (L _ (Keyword Extern)) }
-    enum    { Just (L _ (Keyword Enum)) }
-    for     { Just (L _ (Keyword For)) }
-    goto    { Just (L _ (Keyword Goto)) }
-    if      { Just (L _ (Keyword If)) }
-    inline  { Just (L _ (Keyword Inline)) }
-    register{ Just (L _ (Keyword Register)) }
-    restrict{ Just (L _ (Keyword Restrict)) }
-    return  { Just (L _ (Keyword Return)) }
-    sizeof  { Just (L _ (Keyword Sizeof)) }
-    static  { Just (L _ (Keyword TStatic)) }
-    struct  { Just (L _ (Keyword Struct)) }
-    switch  { Just (L _ (Keyword Switch)) }
-    typedef { Just (L _ (Keyword TypeDef)) }
-    union   { Just (L _ (Keyword Union)) }
-    volatile{ Just (L _ (Keyword Volatile)) }
-    while   { Just (L _ (Keyword While)) }
-    void    { Just (L _ (Keyword Void)) }
-    char    { Just (L _ (Keyword TChar)) }
-    short   { Just (L _ (Keyword TShort)) }
-    int     { Just (L _ (Keyword TInt)) }
-    long    { Just (L _ (Keyword TLong)) }
-    float   { Just (L _ (Keyword TFloat)) }
-    double  { Just (L _ (Keyword TDouble)) }
-    signed  { Just (L _ (Keyword TSigned)) }
-    unsigned{ Just (L _ (Keyword TUnsigned)) }
-    uBool   { Just (L _ (Keyword TuBool)) }
-    uComplex { Just (L _ (Keyword TuComplex)) }
-    uImaginary { Just (L _ (Keyword TuImaginary)) }
-    '{'     { Just (L _ (Punctuator LBrace)) }
-    '}'     { Just (L _ (Punctuator RBrace)) }
-    '('     { Just (L _ (Punctuator LParen)) }
-    ')'     { Just (L _ (Punctuator RParen)) }
-    '['     { Just (L _ (Punctuator LBrack)) }
-    ']'     { Just (L _ (Punctuator RBrack)) }
-    '->'    { Just (L _ (Punctuator Arrow))  }
-    '&'     { Just (L _ (Punctuator BitAnd)) }
-    '|'     { Just (L _ (Punctuator BitOr))   }
-    '*'     { Just (L _ (Punctuator Times)) }
-    '+'     { Just (L _ (Punctuator Plus)) }
-    '-'     { Just (L _ (Punctuator Minus)) }
-    '~'     { Just (L _ (Punctuator Compliment)) }
-    '!'     { Just (L _ (Punctuator Not)) }
-    '/'     { Just (L _ (Punctuator Divide)) }
-    '%'     { Just (L _ (Punctuator Modulo)) }
-    '<<'    { Just (L _ (Punctuator LShift)) } 
-    '>>'    { Just (L _ (Punctuator RShift)) } 
-    '<'     { Just (L _ (Punctuator Lt))     }
-    '<='    { Just (L _ (Punctuator Le))     }
-    '>'     { Just (L _ (Punctuator Gt))     }
-    '>='    { Just (L _ (Punctuator Ge))     }
-    '=='    { Just (L _ (Punctuator Eq))     }
-    '!='    { Just (L _ (Punctuator Neq))    }
-    '^'     { Just (L _ (Punctuator BitXor)) }
-    '&&'    { Just (L _ (Punctuator LAnd))   }
-    '||'    { Just (L _ (Punctuator LOr))    }
-    ';'     { Just (L _ (Punctuator Semi))   }
-    '='     { Just (L _ (Punctuator Assign)) }
-    ','     { Just (L _ (Punctuator Comma))  }
-    '.'     { Just (L _ (Punctuator Dot)) }
-    ':'     { Just (L _ (Punctuator Colon))}
+    ident   { Just (L _ (Ident _)) }
+    typeName { Just (L _ (TTypeName _)) }
+    -- stringlit { Just (L _ (StringLiteral _)) }
+    stringlit  { Just (L _ (Constant (StringLiteral _))) }
+    constant  { Just (L _ (Constant _)) }
 
-    '++'    { Just (L _ (Punctuator PlusPlus)) }
-    '--'    { Just (L _ (Punctuator MinusMinus)) }
-    '?'     { Just (L _ (Punctuator Question))  }
-    '...'   { Just (L _ (Punctuator Variadic))  }
-    '*='    { Just (L _ (Punctuator TimesAssign)) }
-    '/='    { Just (L _ (Punctuator DivAssign)) }
-    '%='    { Just (L _ (Punctuator ModAssign)) }
-    '+='    { Just (L _ (Punctuator PlusAssign)) }
-    '-='    { Just (L _ (Punctuator MinusAssign)) }
-    '<<='   { Just (L _ (Punctuator LShiftAssign)) }
-    '>>='   { Just (L _ (Punctuator RShiftAssign)) }
-    '&='    { Just (L _ (Punctuator AndAssign)) }
-    '^='    { Just (L _ (Punctuator XorAssign)) }
-    '|='    { Just (L _ (Punctuator OrAssign)) }
-    -- '#'     { Just (L _ (Punctuator Stringize)) }
-    -- '##'    { Just (L _ (Punctuator TokenPaste)) }
+    auto    { Just (L $$ (Keyword Auto))  }
+    break   { Just (L $$ (Keyword Break)) }
+    case    { Just (L $$ (Keyword Case)) }
+    const   { Just (L $$ (Keyword Const)) }
+    continue{ Just (L $$ (Keyword Continue)) }
+    default { Just (L $$ (Keyword Default)) }
+    do      { Just (L $$ (Keyword Do)) }
+    else    { Just (L $$ (Keyword Else)) }
+    extern  { Just (L $$ (Keyword Extern)) }
+    enum    { Just (L $$ (Keyword Enum)) }
+    for     { Just (L $$ (Keyword For)) }
+    goto    { Just (L $$ (Keyword Goto)) }
+    if      { Just (L $$ (Keyword If)) }
+    inline  { Just (L $$ (Keyword Inline)) }
+    register{ Just (L $$ (Keyword Register)) }
+    restrict{ Just (L $$ (Keyword Restrict)) }
+    return  { Just (L $$ (Keyword Return)) }
+    sizeof  { Just (L $$ (Keyword Sizeof)) }
+    static  { Just (L $$ (Keyword TStatic)) }
+    struct  { Just (L $$ (Keyword Struct)) }
+    switch  { Just (L $$ (Keyword Switch)) }
+    typedef { Just (L $$ (Keyword TypeDef)) }
+    union   { Just (L $$ (Keyword Union)) }
+    volatile{ Just (L $$ (Keyword Volatile)) }
+    while   { Just (L $$ (Keyword While)) }
+    void    { Just (L $$ (Keyword Void)) }
+    char    { Just (L $$ (Keyword TChar)) }
+    short   { Just (L $$ (Keyword TShort)) }
+    int     { Just (L $$ (Keyword TInt)) }
+    long    { Just (L $$ (Keyword TLong)) }
+    float   { Just (L $$ (Keyword TFloat)) }
+    double  { Just (L $$ (Keyword TDouble)) }
+    signed  { Just (L $$ (Keyword TSigned)) }
+    unsigned{ Just (L $$ (Keyword TUnsigned)) }
+    uBool   { Just (L $$ (Keyword TuBool)) }
+    uComplex { Just (L $$ (Keyword TuComplex)) }
+    uImaginary { Just (L $$ (Keyword TuImaginary)) }
+    '{'     { Just (L $$ (Punctuator LBrace)) }
+    '}'     { Just (L $$ (Punctuator RBrace)) }
+    '('     { Just (L $$ (Punctuator LParen)) }
+    ')'     { Just (L $$ (Punctuator RParen)) }
+    '['     { Just (L $$ (Punctuator LBrack)) }
+    ']'     { Just (L $$ (Punctuator RBrack)) }
+    '->'    { Just (L $$ (Punctuator Arrow))  }
+    '&'     { Just (L $$ (Punctuator BitAnd)) }
+    '|'     { Just (L $$ (Punctuator BitOr))   }
+    '*'     { Just (L $$ (Punctuator Times)) }
+    '+'     { Just (L $$ (Punctuator Plus)) }
+    '-'     { Just (L $$ (Punctuator Minus)) }
+    '~'     { Just (L $$ (Punctuator Compliment)) }
+    '!'     { Just (L $$ (Punctuator Not)) }
+    '/'     { Just (L $$ (Punctuator Divide)) }
+    '%'     { Just (L $$ (Punctuator Modulo)) }
+    '<<'    { Just (L $$ (Punctuator LShift)) } 
+    '>>'    { Just (L $$ (Punctuator RShift)) } 
+    '<'     { Just (L $$ (Punctuator Lt))     }
+    '<='    { Just (L $$ (Punctuator Le))     }
+    '>'     { Just (L $$ (Punctuator Gt))     }
+    '>='    { Just (L $$ (Punctuator Ge))     }
+    '=='    { Just (L $$ (Punctuator Eq))     }
+    '!='    { Just (L $$ (Punctuator Neq))    }
+    '^'     { Just (L $$ (Punctuator BitXor)) }
+    '&&'    { Just (L $$ (Punctuator LAnd))   }
+    '||'    { Just (L $$ (Punctuator LOr))    }
+    ';'     { Just (L $$ (Punctuator Semi))   }
+    '='     { Just (L $$ (Punctuator Assign)) }
+    ','     { Just (L $$ (Punctuator Comma))  }
+    '.'     { Just (L $$ (Punctuator Dot)) }
+    ':'     { Just (L $$ (Punctuator Colon))}
+
+    '++'    { Just (L $$ (Punctuator PlusPlus)) }
+    '--'    { Just (L $$ (Punctuator MinusMinus)) }
+    '?'     { Just (L $$ (Punctuator Question))  }
+    '...'   { Just (L $$ (Punctuator Variadic))  }
+    '*='    { Just (L $$ (Punctuator TimesAssign)) }
+    '/='    { Just (L $$ (Punctuator DivAssign)) }
+    '%='    { Just (L $$ (Punctuator ModAssign)) }
+    '+='    { Just (L $$ (Punctuator PlusAssign)) }
+    '-='    { Just (L $$ (Punctuator MinusAssign)) }
+    '<<='   { Just (L $$ (Punctuator LShiftAssign)) }
+    '>>='   { Just (L $$ (Punctuator RShiftAssign)) }
+    '&='    { Just (L $$ (Punctuator AndAssign)) }
+    '^='    { Just (L $$ (Punctuator XorAssign)) }
+    '|='    { Just (L $$ (Punctuator OrAssign)) }
+    -- '#'     { Just (L $$ (Punctuator Stringize)) }
+    -- '##'    { Just (L $$ (Punctuator TokenPaste)) }
 
 {-
 %left '||'
@@ -143,11 +149,12 @@ import Control.Monad
 
 %%
 PrimaryExpr :: { Expr Identifier }
-    : ident                                 { EIdent $1         }
-    | constant                              { EConstant $1      }
-    | stringlit                             { EStringLiteral $1 }
+    : ident                                 { EIdent (extractSpan $1) (extractIdentifier $1)     }
+    | constant                              { EConstant (extractSpan $1) (extractConstant $1)    }
+    | stringlit                             { EConstant (extractSpan $1) (extractConstant $1)      }
     | '(' Expr ')'                          { $2                }
 
+    -- | stringlit                             { EStringLiteral $1 }
 
 PostfixExpr  :: { Expr Identifier }
     : PrimaryExpr                           { $1                }
@@ -157,8 +164,8 @@ PostfixExpr  :: { Expr Identifier }
     | PostfixExpr '(' ')'                   { Called $1 []              }
     | PostfixExpr '(' ArgExprList ')'       { Called $1 (reverse $3)    }
 
-    | PostfixExpr '.' ident                 { (DotE $1 $3)          }
-    | PostfixExpr '->' ident                { (ArrowE $1 $3)        }
+    | PostfixExpr '.' ident                 { (DotE $1 (extractIdentifier $3))          }
+    | PostfixExpr '->' ident                { (ArrowE $1 (extractIdentifier $3))        }
     | PostfixExpr '++'                      { (UnaryE UPostIncr $1) }
     | PostfixExpr '--'                      { (UnaryE UPostDecr $1) }
     | '(' TypeName ')' '{' InitializerList '}'     { InitE $2 (reverse $5) }
@@ -280,15 +287,22 @@ Declaration :: { Declaration Identifier }
 
 -- Declarations 
 
-DeclarationSpecifiers :: { [DeclarationSpecifiers Identifier] }
+DeclarationSpecifiers :: { [DeclarationSpecifier Identifier] }
     : DeclarationSpecifiers DeclarationSpecifier    { $2 : $1 }
     | DeclarationSpecifier                          { [$1] }
 
-DeclarationSpecifier :: { DeclarationSpecifiers Identifier }
-    : StorageClassSpecifier                         { DSStorageSpec $1 }
+DeclarationSpecifier :: { DeclarationSpecifier Identifier }
+    : StorageClassSpecifier                         { DSStorageSpec (getSpan $1) (getInner $1) }
     | TypeSpecifier                                 { DSTypeSpec $1    }
-    | TypeQualifier                                 { DSTypeQual $1    }
-    | FunctionSpecifier                             { DSFuncSpec $1    }
+    | TypeQualifier                                 { DSTypeQual (getSpan $1) (getInner $1 )    }
+    -- function specifiers
+    | inline                                        { DSFuncSpec $1 FSInline }
+    -- | FunctionSpecifier                             { DSFuncSpec $1    }
+
+
+-- page 112
+--FunctionSpecifier :: { Located FunctionSpecifier }
+--    : inline    { L $1 FSInline }
 
 InitDeclarationList :: { [InitDeclaration Identifier] }
     : InitDeclarator                            { [ $1 ] } 
@@ -300,61 +314,58 @@ InitDeclarator :: { InitDeclaration Identifier }
 
 
 -- page 98
-StorageClassSpecifier :: { StorageClassSpecifier  }
-    : typedef   { SCTypedef     }
-    | extern    { SCExtern      }
-    | static    { SCStatic      }
-    | auto      { SCAuto        }
-    | register  { SCRegister    }
+StorageClassSpecifier :: { Located StorageClassSpecifier  }
+    : typedef   { L $1 SCTypedef     }
+    | extern    { L $1 SCExtern      }
+    | static    { L $1 SCStatic      }
+    | auto      { L $1 SCAuto        }
+    | register  { L $1 SCRegister    }
 
     -- this needs to have the standard types and stuff
 -- page 99
 TypeSpecifier :: { TypeSpecifier Identifier }
-    : void                      { PrimType PVoid        }
-    | char                      { PrimType PChar        }
-    | short                     { PrimType PShort       }
-    | int                       { PrimType PInt         }
-    | long                      { PrimType PLong        }
-    | float                     { PrimType PFloat       }
-    | double                    { PrimType PDouble      }
-    | signed                    { PrimType PSigned      }
-    | unsigned                  { PrimType PUnsigned    }
-    | uBool                     { PrimType PuBool       }
-    | uComplex                  { PrimType PuComplex    }
-    | uImaginary                { PrimType PuImaginary  }
+    : void                      { PrimType (L $1 PVoid)        }
+    | char                      { PrimType (L $1 PChar)        }
+    | short                     { PrimType (L $1 PShort)       }
+    | int                       { PrimType (L $1 PInt)         }
+    | long                      { PrimType (L $1 PLong)        }
+    | float                     { PrimType (L $1 PFloat)       }
+    | double                    { PrimType (L $1 PDouble)      }
+    | signed                    { PrimType (L $1 PSigned)      }
+    | unsigned                  { PrimType (L $1 PUnsigned)    }
+    | uBool                     { PrimType (L $1 PuBool)       }
+    | uComplex                  { PrimType (L $1 PuComplex)    }
+    | uImaginary                { PrimType (L $1 PuImaginary)  }
     | StructOrUnionSpecifier    { StructType $1         }
     | EnumSpecifier             { EnumType $1           }
-    | TypedefName               { IdentType $1          }
+    | TypedefName               { IdentType (L (getSpan $1) (getInner $1))          }
 
 -- page 108
-TypeQualifier :: { TypeQualifier }
-    : const         { TQConst       }
-    | restrict      { TQRestrict    }
-    | volatile      { TQVolatile    }
+TypeQualifier :: { Located TypeQualifier }
+    : const         { L $1 TQConst       }
+    | restrict      { L $1 TQRestrict    }
+    | volatile      { L $1 TQVolatile    }
 
--- page 112
-FunctionSpecifier :: { FunctionSpecifier }
-    : inline    { FSInline }
 
 -- page 101
 -- might merge these two rules into 1 with 6 rules
 StructOrUnionSpecifier :: { DataLayoutSpec Identifier }
     : StructOrUnion ident '{' StructDeclarationList '}'
         { case $1 of 
-            SUStruct -> StructDef (Just $2) $4
-            SUUnion -> UnionDef (Just $2) $4 }
+            L s SUStruct -> StructDef s (Just (L (extractSpan $2) (extractIdentifier $2)) ) $4
+            L s SUUnion -> UnionDef s (Just (L (extractSpan $2) (extractIdentifier $2))) $4 }
     | StructOrUnion  '{' StructDeclarationList '}' 
         { case $1 of 
-            SUStruct -> StructDef Nothing $3
-            SUUnion -> UnionDef Nothing $3 }
+            L s SUStruct -> StructDef s Nothing $3
+            L s SUUnion -> UnionDef s Nothing $3 }
     | StructOrUnion ident
         { case $1 of
-            SUStruct -> StructRef $2
-            SUUnion -> UnionRef $2 }
+            L s SUStruct -> StructRef s (L (extractSpan $2) (extractIdentifier $2))
+            L s SUUnion -> UnionRef s (L (extractSpan $2) (extractIdentifier $2)) }
 
-StructOrUnion :: { StructOrUnion }
-    : struct    { SUStruct }
-    | union     { SUUnion  }
+StructOrUnion :: { Located StructOrUnion }
+    : struct    { L $1 SUStruct }
+    | union     { L $1 SUUnion  }
 
 
 StructDeclarationList :: { [StructDeclaration Identifier] }
@@ -376,7 +387,7 @@ SpecifierQualifierList :: { [SpecifierQualifier Identifier] }
     : TypeSpecifier SpecifierQualifierList  { (Right $1) : $2    }
     | TypeQualifier SpecifierQualifierList  { (Left $1) : $2   }
     | TypeSpecifier                         { [ Right $1 ]       }
-    | TypeQualifier                         { [ Left $1 ]      }
+    | TypeQualifier                         { [ Left  $1 ]      }
 
 -- unfinished
 StructDeclarator :: { StructDeclarator Identifier }
@@ -387,27 +398,27 @@ StructDeclarator :: { StructDeclarator Identifier }
 
 -- page 104
 EnumSpecifier :: { EnumSpecifier Identifier }
-    : enum ident '{' EnumeratorList '}'     { EnumSpecifier (Just $2) (reverse $4)  }
+    : enum ident '{' EnumeratorList '}'     { EnumSpecifier (Just (L (extractSpan $2) (extractIdentifier $2))) (reverse $4)  }
     | enum  '{' EnumeratorList '}'          { EnumSpecifier Nothing   (reverse $3)  }
-    | enum ident '{' EnumeratorList ',' '}' { EnumSpecifier (Just $2) (reverse $4)  }
+    | enum ident '{' EnumeratorList ',' '}' { EnumSpecifier (Just (L (extractSpan $2 ) (extractIdentifier $2))) (reverse $4)  }
     | enum '{' EnumeratorList ',' '}'       { EnumSpecifier Nothing   (reverse $3)  }
-    | enum ident                            { EnumRef $2                     }
+    | enum ident                            { EnumRef (L (extractSpan $2) (extractIdentifier $2))                     }
 
                                     -- this needs to be a "constant" expression
 -- little hack for the list building
 --EnumeratorList  :   EnumeratorListI { reverse $1                }
 
-EnumeratorList :: { [(Identifier, Maybe (Expr Identifier))] }
+EnumeratorList :: { [(Located Identifier, Maybe (Expr Identifier))] }
     : Enumerator                        { [ $1 ]    }
     | EnumeratorList ',' Enumerator    { $3 : $1   }
 
-Enumerator :: { (Identifier, Maybe (Expr Identifier)) }
+Enumerator :: { (Located Identifier, Maybe (Expr Identifier)) }
     : EnumerationConstant             { ($1, Nothing) }
     | EnumerationConstant '=' Expr    { ($1, Just $3) }
                                     -- this needs to be a "constant" expression
 
-EnumerationConstant :: { Identifier }
-    : ident { $1 :: Identifier }
+EnumerationConstant :: { Located Identifier }
+    : ident { (L (extractSpan $1) (extractIdentifier $1)) :: Located Identifier }
 
 -- Page 114
 
@@ -417,7 +428,7 @@ Declarator :: { Declarator Identifier }
 
 
 DirectDeclarator :: { Declarator Identifier }
-    : ident                                                             { DDIdent $1}
+    : ident                                                             { DDIdent (extractIdentifier $1)}
     | '(' Declarator ')'                                                { $2              }
     -- array declarations
     | DirectDeclarator '[' TypeQualifierList AssignmentExpr ']'         { DDArr $1 False $3 (Just $4) False }
@@ -437,13 +448,13 @@ DirectDeclarator :: { Declarator Identifier }
 -- ([TypeQualifier] -> (Maybe (AbstractDeclarator i)) -> AbstractDeclarator i) -> Maybe (AbstractDeclarator i) -> AbstractDeclarator i
 
 -- declarators
-Pointer :: { forall a b. ([TypeQualifier] -> a -> b) -> (b -> a) -> a -> b }
+Pointer :: { forall a b. ([Located TypeQualifier] -> a -> b) -> (b -> a) -> a -> b }
     : '*'                           { \constr _ -> constr [] }
     | '*' TypeQualifierList         { \constr _ -> constr (reverse $2)    }
     -- | '*' TypeQualifierList Pointer { \constr (c :: a) d -> constr (reverse $2) (($3 constr) c)  }
     | '*' Pointer                   { \constr d c  -> constr [] (d ($2 constr d c)) }
 
-TypeQualifierList :: {[TypeQualifier ]}
+TypeQualifierList :: {[Located TypeQualifier ]}
     : TypeQualifier                     { [ $1 ]  }
     | TypeQualifierList TypeQualifier  { $2 : $1   }
 
@@ -461,8 +472,8 @@ ParameterDeclaration :: { ParameterDeclaration Identifier }
     | DeclarationSpecifiers                     { AbsParameterDeclaration $1 Nothing }
 
 IdentifierList :: { [Identifier] }
-    : ident                     { [ $1 ]  }
-    | IdentifierList ',' ident { $3 : $1 }
+    : ident                     { [ extractIdentifier $1 ]  }
+    | IdentifierList ',' ident { (extractIdentifier $3) : $1 }
 
 -- page 122
 TypeName :: { TypeName Identifier }
@@ -488,8 +499,8 @@ DirectAbstractDeclarator :: { AbstractDeclarator Identifier }
     | '(' ')'                                           { Parens Nothing []         }
 
 -- page 123
-TypedefName :: { Identifier }
-    : typeName { $1 }
+TypedefName :: { Located Identifier }
+    : typeName { L (extractSpan $1) (extractTypename $1) :: Located Identifier }
 
 -- page 125
 Initializer :: { Initializer Identifier }
@@ -512,11 +523,11 @@ DesignatorList :: {[Designator Identifier] }
 
 Designator  :: { Designator Identifier }
     : '[' ConstExpr ']' { DesignatorExpr $2 }
-    | '.' ident         { DesignatorDot $2  }
+    | '.' ident         { DesignatorDot (extractIdentifier $2)  }
 
 
 Statement :: { Statement Identifier }
-    : ident ':' Statement                       { LabeledStmt $1 $3 }
+    : ident ':' Statement                       { LabeledStmt (extractIdentifier $1) $3 }
     | case Expr ':' Statement                   { CaseStmt $2 $4 }
     | default ':' Statement                     { DefaultStmt $3 }
     | CompoundStatement                         { CompoundStmt $1 }
@@ -527,7 +538,7 @@ Statement :: { Statement Identifier }
     | while '(' Expr ')' Statement              { WhileStmt $3 $5   }
     | do Statement while '(' Expr ')' ';'       { DoStmt $2 $5      }
     -- lots of opts
-    | goto ident ';'                            { GotoStmt $2           }
+    | goto ident ';'                            { GotoStmt (extractIdentifier $2)           }
     | continue ';'                              { ContinueStmt          }
     | break ';'                                 { BreakStmt             }
     | return ';'                                { ReturnStmt Nothing    }
@@ -620,9 +631,9 @@ getDeclaredIdent (DDArr inner _ _ _ _) = getDeclaredIdent inner
 getDeclaredIdent (DDFuncPList inner _) = getDeclaredIdent inner
 getDeclaredIdent (DDFuncIList inner _) = getDeclaredIdent inner
 
-containsTypeDef :: [DeclarationSpecifiers Identifier] -> Bool
+containsTypeDef :: [DeclarationSpecifier Identifier] -> Bool
 containsTypeDef = any $ \case 
-    DSStorageSpec (SCTypedef) -> True
+    DSStorageSpec _ (SCTypedef) -> True
     _ -> False
 
 handleDeclaration :: (IOE :> es, State ParserScope :> es) => Declaration Identifier -> ConduitT i o (Eff es) (Declaration Identifier)
@@ -650,6 +661,26 @@ checkToken x = pure x
 
 injectTypeNameTokens :: (State ParserScope :> es) => ConduitT (Located Token) (Located Token) (Eff es) ()
 injectTypeNameTokens = mapMC $ checkToken
+
+
+
+extractIdentifier :: Maybe (Located Token) -> Identifier
+extractIdentifier (Just (L _ (Ident i))) = i
+extractIdentifier _ = error "extractIdentifier is a hack and I hate it but happy cant have multiple semantic values for a token (span + actual value) :("
+
+extractTypename :: Maybe (Located Token) -> Identifier
+extractTypename (Just (L _ (TTypeName i))) = i
+extractTypename _ = error "extractTypename is a hack and I hate it but happy cant have multiple semantic values for a token (span + actual value) :("
+
+extractConstant :: Maybe (Located Token) -> Constant
+extractConstant (Just (L _ (Constant i))) = i
+extractConstant _ = error "extractConstant is a hack and I hate it but happy cant have multiple semantic values for a token (span + actual value) :("
+
+extractSpan :: Maybe (Located a) -> SrcSpan
+extractSpan (Just (L s _)) = s
+extractspan _ = error "extractSpan is a hack and I hate it but happy cant have multiple semantic values for a token (span + actual value) :("
+
+
 }
 
 -- --parseError :: Error String :> es => (Token, [String]) -> Eff es a
