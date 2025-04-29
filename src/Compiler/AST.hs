@@ -1,5 +1,7 @@
 module Compiler.AST where
 
+import Compiler.Parser.SrcLoc
+
 {-
 Translations Phases:
 1. map source file multibyte characters to source character set. (introduce newlines for end-of-line indicators if necessary)
@@ -13,3 +15,5 @@ Translations Phases:
 8. link time :)
 -}
 
+
+-- page

@@ -4,6 +4,7 @@ module Compiler.Parser.GrammarHelpers  where
 import Compiler.Parser.ParseTree
 import Compiler.Types
 import Compiler.SymbolTable
+import Compiler.Parser.Tokens (Constant (IntConst))
 
 import Control.Lens hiding (para, (<&>))
 
@@ -21,6 +22,7 @@ import Data.Map qualified as M
 import Data.Map (Map)
 --import Data.Text qualified as T
 import Data.Text (Text)
+import qualified Data.Text as T
 import Data.Bifunctor
 --import Data.List.NonEmpty ( NonEmpty(..), (<|) )
 --import Data.List.NonEmpty qualified as N
@@ -35,7 +37,9 @@ import Control.Monad
 --import Data.Coerce
 import Compiler.Parser.SrcLoc
 import Control.Applicative
-import Control.Lens hiding (para)
+import Control.Lens hiding (para, (<|))
+import qualified Data.List.NonEmpty as NE 
+import Data.List.NonEmpty (NonEmpty((:|)))
 
 -- import Compiler.Parser.Tokens (Identifier)
 type Identifier = Text
@@ -43,14 +47,11 @@ type Identifier = Text
 
 data DeclaratorParseError
 
-data VariableDef = VariableDef deriving stock (Eq, Show, Ord)
-data FunctionDef = FunctionDef deriving stock (Eq, Show, Ord)
-
-newtype FunctionID = MkFunction Int deriving stock (Eq, Show, Ord)
 
 
 
 
+--runSymbolTable (EDecl e:xs) = error ""
 {-
     C has 4 namespaces.
     - labels (only in function scope)
@@ -59,6 +60,12 @@ newtype FunctionID = MkFunction Int deriving stock (Eq, Show, Ord)
     - ordinaries
 -}
 
+
+newtype FunctionID = MkFunction Int deriving stock (Eq, Show, Ord)
+
+newtype VariableID = MkVariable Int deriving stock (Eq, Show, Ord)
+newtype TagID = MkData Int deriving stock (Eq, Show, Ord)
+newtype TypeID = MkType Int deriving stock (Eq, Show, Ord)
 
 
 data Ordinaries
@@ -74,217 +81,242 @@ It also contains `definedInScope` which is a set of the ordinaries defined in th
 -}
 data BlockScope = BlockScope 
     { _allOrdinaries :: Map Text Ordinaries
+    , _tags :: Map Text Int
+    , _tagsInScope :: Set Int
     , _definedInScope :: Set Ordinaries
     } deriving stock (Eq, Show)
 makeLenses ''BlockScope
 
 emptyBlockScope :: BlockScope
-emptyBlockScope = BlockScope M.empty Set.empty
+emptyBlockScope = BlockScope M.empty M.empty Set.empty Set.empty
 
 
-{-
-ParserState is what the name suggests.
-ordinaryScope contains a BlockScope
--}
-data ParserState 
-    = ParserState 
-        { 
-          -- scope stuff  
-          -- _ordinaryScope :: !(NonEmpty BlockScope)
-          _currentScope :: BlockScope
-        , _scopeStack  :: [BlockScope]
-        -- , functionScope :: Maybe (Map Text LabelID)
-        , _variableDefs :: !(Map VariableID (Text, VariableDef))
-        , _functionDefs :: !(Map FunctionID (Text, FunctionDef))
-        , _typeDefs :: !(Map TypeID (Text, CType))
-        ,  _idGen :: {-# UNPACK #-} !Int
-        -- , _variableIdGen :: !UniqueGen
-        -- , _functionIdGen :: !UniqueGen
-        -- , _typeIdGen :: !UniqueGen
-        } deriving stock (Eq, Show)
-makeLenses ''ParserState
+--newtype LabelID = MkLabel Int deriving stock (Eq, Ord)
 
-
-
-
-enterScope :: ParserState -> ParserState
-enterScope ps@ParserState{_currentScope=cs@BlockScope{_allOrdinaries,_definedInScope},_scopeStack} 
-    = ps{_currentScope=BlockScope{_allOrdinaries,_definedInScope=Set.empty},_scopeStack=cs:_scopeStack}
-
-exitScope :: ParserState -> Maybe (BlockScope, ParserState)
-exitScope ps@ParserState{_currentScope,_scopeStack}
-    = case _scopeStack of
-        [] -> Nothing
-        (x:xs) -> Just (_currentScope, ps{_currentScope=x,_scopeStack=xs})
-
-enterScopeE :: (State ParserState :> es) => Eff es ()
-enterScopeE = modify enterScope
-
-exitScopeE :: (State ParserState :> es, Error String :> es) => Eff es BlockScope
-exitScopeE = get >>= maybe (throwError "Cannot exit top level scope") (\(b,newP) -> pure newP $> b) . exitScope 
-
-
--- inScopeE :: (State ParserState :> es) => Eff es a -> Eff es (a, BlockScope)
--- inScopeE f = error ""
-
-defineType :: State ParserState :> es => (Declarator Text -> ParserState  -> (CType, ParserState)) -> Text -> Declarator Text ->  Eff es CType
-defineType f name decl = do
-    state $ \parserState@ParserState{_typeDefs,_idGen} -> let
-            newState = parserState{_idGen=_idGen+1,_typeDefs=M.insert (MkType _idGen) (name, newVal) _typeDefs}
-            (newVal,finalState) = f decl newState
-        in (newVal, finalState) 
-
-
-
-
--- newParserState :: ParserState
--- newParserState = ParserState
---     { ordinaryScope=emptyBlockScope:|[]
---     , variableDefs=M.empty
---     , functionDefs=M.empty
---     , typeDefs=M.empty
---     , variableIdGen=newUniqueGen
---     , functionIdGen=newUniqueGen
---     , typeIdGen=newUniqueGen
+-- data LabelScope 
+--     = LabelScope 
+--     { labels :: !(Map LabelID (Text, SrcSpan) )
 --     }
 
 
--- recMap :: m -> (i -> j -> m -> m) -> i -> x -> (m -> x -> j) -> m
--- recMap omap updateMap idx val f = map2
---     where
---         map2 = updateMap idx newVal omap
---         newVal = f map2 val
+
+
+data VariableScope
+    = VariableScope {
+        variableDefs' :: !(Map VariableID VariableDef)
+    }
+
+data VariableDef 
+    = VariableDef 
+    deriving stock (Eq, Show, Ord)
+
+data FunctionDef 
+    = FunctionDef {
+        funcName :: Text,
+        funcSpan :: SrcSpan,
+        retType :: CType,
+        arguments :: [CType],
+        isVariadic :: CType,
+        -- if a variable is referenced in the body but is not referenced here it should refer to the parent scope
+        localVariables :: !(Map VariableID VariableDef)
+    }
+    | PrototypeDef Text CType [CType]
+    deriving stock (Eq, Show)
+
+data DataDef 
+    -- name, fields
+    = StructDef' Text SrcSpan CStruct 
+    | EnumDef Text  SrcSpan [(Text, Int)]
+    | UnionDef' Text SrcSpan CUnion
+    | IncompleteStruct Text SrcSpan
+    | IncompleteEnum Text SrcSpan
+    | IncompleteUnion Text SrcSpan
+    deriving stock (Eq, Show)
+
+
+data SymbolTable = SymbolTable
+    -- the block scope
+    { _scope :: NonEmpty BlockScope
+    -- maps a variable id to a name, source span, and definition
+    , _variableDefs :: !(Map VariableID (Text, SrcSpan, VariableDef))
+    , _functionDefs :: !(Map FunctionID (Text, SrcSpan, FunctionDef))
+    -- 
+    , _typeDefs :: !(Map TypeID (Text, SrcSpan, CType))
+    -- tag scopes
+    --
+    , _dataDefs :: !(Map Int DataDef)
+    --, _structDefs :: !(Map Int CStruct)
+    --, _unionDefs :: !(Map Int CUnion)
+    --, _enumDefs :: !(Map Int Int)
+    --, _labelDefs :: !(Map Labe)
+    , _idGen :: {-# UNPACK #-} !Int
+    }
+makeLenses ''SymbolTable
 
 
 
-getVariableID :: Ordinaries -> Maybe VariableID
-getVariableID (Variable v) = Just v
-getVariableID _ = Nothing
-
-getTypeAliasID :: Ordinaries -> Maybe TypeID
-getTypeAliasID (TypeAlias v) = Just v
-getTypeAliasID _ = Nothing
-
-getFunctionID :: Ordinaries -> Maybe FunctionID
-getFunctionID (FunctionID v) = Just v
-getFunctionID _ = Nothing
+emptySymbolTable :: SymbolTable
+emptySymbolTable = SymbolTable {
+        _scope=emptyBlockScope:|[],
+        _variableDefs=M.empty,
+        _functionDefs=M.empty,
+        _typeDefs=M.empty,
+        _dataDefs=M.empty,
+        _idGen=0
+    }
 
 
---exitScope :: (State ParserState :> es) => Eff es (Set.)
+enterScope_ :: SymbolTable -> SymbolTable
+enterScope_ s@SymbolTable{_scope=(h:|t)} = s{_scope=h:|h:t} 
 
-isType :: (State ParserState :> es) => Text -> Eff es Bool
-isType name = isJust . (getTypeAliasID <=< M.lookup name . _allOrdinaries . _currentScope) <$> get
-    
+enterScope :: State SymbolTable :> es => Eff es ()
+enterScope = modify enterScope_
 
+exitScope_ :: SymbolTable -> SymbolTable
+exitScope_ st = case st^.scope of
+    _:|[] -> error "cannot exit the top level scope"
+    _:|x:y -> st & scope .~ x:|y
 
-nextId :: (State ParserState :> es) => Eff es Int
-nextId = state (idGen <+~ 1)
+exitScope :: (State SymbolTable :> es) => Eff es ()
+exitScope = modify exitScope_
 
+nextID :: Int -> (Int,Int)
+nextID i = (i,i+1)
 
-defineIdentifier :: (State ParserState :> es, Error String :> es) => Text -> VariableDef -> Eff es VariableID
+defineIdentifier :: (State SymbolTable :> es, Error String :> es) => Text -> VariableDef -> Eff es VariableID
 defineIdentifier name val = do
-    -- ordinaries' :: NonEmpty BlockScope <- view ordinaryScope <$> get
-    -- let j = ordinaries' ^? _head
-    error ""
+    s@SymbolTable{_scope=bs@BlockScope{_allOrdinaries, _definedInScope}:|t, _idGen,_variableDefs} <- get
 
-getCurrentScope :: (State ParserState :> es) => Eff es BlockScope
-getCurrentScope = _currentScope <$> get
+    case M.lookup name _allOrdinaries of 
+        Just x -> when (Set.member x _definedInScope) (throwError "cannot redefine a variable in the same scope")
+        Nothing -> pure ()
 
+    let (newId, idGen') = nextID _idGen
+    put s{
+        _scope=bs{_allOrdinaries=M.insert name (Variable (MkVariable newId)) _allOrdinaries, _definedInScope=Set.insert (Variable (MkVariable newId)) _definedInScope}:|t, 
+        _idGen=idGen', 
+        _variableDefs=M.insert (MkVariable newId) (name, error "", val) _variableDefs
+    }
+    pure (MkVariable newId)
 
-defineTypeAlias :: (State ParserState :> es, Error String :> es) => Text -> CType -> Eff es TypeID
+defineTypeAlias :: (State SymbolTable :> es, Error String :> es) => Text -> CType -> Eff es VariableID
 defineTypeAlias name val = do
-    -- ParserState{_ordinaryScope=BlockScope{_allOrdinaries, _definedInScope}:|t, _typeDefs} <- get
+    s@SymbolTable{_scope=bs@BlockScope{_allOrdinaries, _definedInScope}:|t, _idGen,_typeDefs} <- get
+    let spn = error ""
+    case M.lookup name _allOrdinaries of 
+        Just x -> when (Set.member x _definedInScope) (throwError "cannot redefine a variable in the same scope")
+        Nothing -> pure ()
+
+    let (newId, idGen') = nextID _idGen
+    put s{
+        _scope=bs{_allOrdinaries=M.insert name (TypeAlias (MkType newId)) _allOrdinaries, _definedInScope=Set.insert (TypeAlias (MkType newId)) _definedInScope}:|t, 
+        _idGen=idGen', 
+        _typeDefs=M.insert (MkType newId) (name, spn, val) _typeDefs
+    }
+    pure (MkVariable newId)
+
+getOrdinaryId :: State SymbolTable :> es => Text -> Eff es (Maybe Ordinaries)
+getOrdinaryId name = M.lookup name . _allOrdinaries . NE.head . _scope <$> get 
 
 
-    -- case M.lookup name _allOrdinaries of 
-    --     Just x -> when (Set.member x _definedInScope) (throwError "cannot redefine a variable in the same scope")
-    --     Nothing -> pure ()
+-- partial function, will explode if an invalid type id is supplied
+getTypeFromId :: State SymbolTable :> es => TypeID -> Eff es CType
+getTypeFromId tid = do
+    SymbolTable{_typeDefs} <- get
+    let (_,_,ty) = fromJust $ M.lookup tid _typeDefs 
+    pure ty
 
 
-    newId <- nextId
-    
-    
-    pure newId
+-- defines an incomplete struct.
+-- Used when defining a struct like `struct i {} j;`
+-- used when defining a struct prototype: `struct i`;
+defineIncompleteStruct :: (State SymbolTable :> es, Error String :> es) => Text -> SrcSpan -> Eff es Int
+defineIncompleteStruct name spn = do
+    s@SymbolTable{_scope=bs@BlockScope{_tags, _tagsInScope}:|t, _idGen, _dataDefs} <- get
+    case M.lookup name _tags of 
+        Just tagID -> case (Set.member tagID _tagsInScope, M.lookup tagID _dataDefs) of
+            (_,Nothing) -> error "Internal error: TagID does not have associated definition in data definitions table"
+            (True, Just (StructDef' {} )) -> throwError "Cannot redefine type in the same scope"
+            (True, Just (IncompleteStruct _ _)) -> do
+                error ""
+            (True, _) -> do
+                throwError ""
+
+            (False, _) -> do
+                -- shadow previous definition
+                put s{
+                    _scope=bs{_tags=M.insert name _idGen _tags}:|t,
+                    _dataDefs=M.insert _idGen (IncompleteStruct name spn) _dataDefs,
+                    _idGen=_idGen+1
+                }
+                pure _idGen
+        Nothing -> do
+            put s{
+                _scope=bs{_tags=M.insert name _idGen _tags}:|t,
+                --_structDefs=M.insert _structDefs (IncompleteStruct ),
+                _dataDefs=M.insert _idGen (IncompleteStruct name spn) _dataDefs,
+                _idGen=_idGen+1
+            }
+            pure _idGen
+
+
+
+-- happens if an incomplete struct is redefined in the same scope
+replaceStructDefinition :: (State SymbolTable :> es, Error String :> es) => Int -> [(Text,TypeQualifiers,CType,Maybe Int)] ->  Eff es ()
+replaceStructDefinition tid fields = do
+    s@SymbolTable{_dataDefs} <- get
+    (name,spn) <- case M.lookup tid _dataDefs of
+        Nothing -> error "Internal error, struct id invalid"
+        Just (IncompleteStruct name spn) -> pure (name,spn)
+        Just (StructDef' name spn _) -> throwError ("cannot redefine struct `" ++ T.unpack name ++ "` originally defined at " ++ show spn)
+        Just (IncompleteUnion name _span) -> throwError $ "cannot redefine union `" ++ T.unpack name ++ "` as a struct"
+        Just (UnionDef' name _span _) -> throwError $ "cannot redefine union `" ++ T.unpack name ++ "` as a struct"
+        Just (IncompleteEnum name _span) -> throwError $ "cannot redefine enum `" ++ T.unpack name ++ "` as a struct"
+        Just (EnumDef name _span _) -> throwError $ "cannot redefine enum `" ++ T.unpack name ++ "` as a struct"
+
+    put s{
+        _dataDefs=M.insert tid (StructDef' name spn (CStruct fields)) _dataDefs
+    }
+
+
+
+defineFunction :: (State SymbolTable :> es, Error String :> es) => Text -> CType -> [CType] -> Bool ->  Eff es ()
+defineFunction name ret args variadic = do
+    error ""
     -- put s{
-    --     _ordinaryScope=BlockScope{allOrdinaries=M.insert name (Variable newId) allOrdinaries, definedInScope=Set.insert (Variable newId) definedInScope}:|t, 
-    --     _variableIdGen=variableIdGen', 
-    --     _variableDefs=M.insert newId (name, val) _variableDefs
+    --     _dataDefs=M.insert tid (StructDef' name spn (CStruct fields)) _dataDefs
     -- }
-    -- pure newId
-
-    error ""
 
 
+{- -- given a tagid 
+defineStruct :: Text -> SrcSpan -> [(Text,TypeQualifiers,CType,Maybe Int)] ->  Eff es ()
+defineStruct name fields = do
+    s@SymbolTable{_scope=bs@BlockScope{_tags}:|t, _idGen, _dataDefs} <- get
 
-
-
-
-{--
--- name and value
-defineIdentifier :: (State ParserState :> es, Error String :> es) => Text -> VariableDef -> Eff es VariableID
-defineIdentifier name val = do
-    s@ParserState{_ordinaryScope=BlockScope{allOrdinaries, definedInScope}:|t, _variableIdGen, _variableDefs} <- get
-
-    case M.lookup name allOrdinaries of 
-        Just x -> when (Set.member x definedInScope) (throwError "cannot redefine a variable in the same scope")
-        Nothing -> pure ()
-
-    let (newId, variableIdGen') = nextVariableID _variableIdGen
-    put s{
-        _ordinaryScope=BlockScope{allOrdinaries=M.insert name (Variable newId) allOrdinaries, definedInScope=Set.insert (Variable newId) definedInScope}:|t, 
-        _variableIdGen=variableIdGen', 
-        _variableDefs=M.insert newId (name, val) _variableDefs
+    let _ = s{
+        _scope=bs{_tags=M.insert name _idGen _tags}:|t,
+        --_structDefs=M.insert _structDefs (IncompleteStruct ),
+        _dataDefs=M.insert _idGen (IncompleteStruct name spn) _dataDefs,
+        _idGen=_idGen+1
     }
-    pure newId
+    pure _idGen
 
--- name and value
-defineTypeAlias :: (State ParserState :> es, Error String :> es) => Text -> CType -> Eff es TypeID
-defineTypeAlias name val = do
-    s@ParserState{_ordinaryScope=BlockScope{allOrdinaries, definedInScope}:|t, _typeIdGen, _typeDefs} <- get
-
-    case M.lookup name allOrdinaries of 
-        Just x -> when (Set.member x definedInScope) (throwError "cannot redefine a variable in the same scope")
+    s@SymbolTable{_dataDefs} <- get
+    case M.lookup name _allOrdinaries of 
+        Just x -> when (Set.member x _definedInScope) (throwError "cannot redefine a variable in the same scope")
         Nothing -> pure ()
+-}
 
-    let (newId, typeIdGen') = nextTypeID _typeIdGen
+{-
+struct shadowing:
 
-    put s{
-        _ordinaryScope=BlockScope{allOrdinaries=M.insert name (TypeAlias newId) allOrdinaries, definedInScope=Set.insert (TypeAlias newId) definedInScope}:|t, 
-        _typeIdGen=typeIdGen', 
-        _typeDefs=M.insert newId (name, val) _typeDefs
-    }
-
-    pure newId
- -}
-
-
-
-
-
-
-
-
-
-{- 
-compileTranslationUnit :: [ExternDecl Identifier] -> Eff es ()
-compileTranslationUnit = foldM compileExternDecl ()
-
-compileExternDecl :: () -> ExternDecl Text -> Eff es ()
-compileExternDecl _ (EFunctionDef definition) = error ""
-compileExternDecl _ (EDecl declaration) = error ""
-
-compileFunctionDefinition :: () -> FunctionDefinition Text -> Eff es ()
-compileFunctionDefinition _ (FunctionDefinition specifiers declarator declarationList body) = error ""
-
-compileEDeclaration :: () -> Declaration Text -> Eff es ()
-compileEDeclaration _ (Declaration specifiers initDeclarations) = error "" 
+A struct is incomplete. 
 -}
 
 
 
-
-
-
+--getStructTagId :: State SymbolTable :> es => Text -> Eff es (Maybe TagID)
+--getStructTagId 
 
 
 
@@ -296,6 +328,13 @@ qualToQualifiers TQVolatile = volatileTypeQualifier
 foldQualifiers :: [TypeQualifier] -> TypeQualifiers
 foldQualifiers = foldMap qualToQualifiers
 
+foldLocatedQualifiers :: [Located TypeQualifier] -> (TypeQualifiers, [(SrcSpan, String)])
+foldLocatedQualifiers = foldl' go (emptyQualifier, [])
+    where
+        go :: (TypeQualifiers, [(SrcSpan, String)]) -> Located TypeQualifier -> (TypeQualifiers, [(SrcSpan, String)])
+        go (quals, warnings) (L s TQConst) = if constq quals then (quals, (s, "Repeat `const` qualifier"):warnings) else (quals{constq=True}, warnings)
+        go (quals, warnings) (L s TQRestrict) = if restrict quals then (quals, (s, "Repeat `restrict` qualifier"):warnings) else (quals{restrict=True}, warnings)
+        go (quals, warnings) (L s TQVolatile) = if volatile quals then (quals, (s, "Repeat `volatile` qualifier"):warnings) else (quals{volatile=True}, warnings)
 
 -- parseTopLevelDeclaration :: Declaration i -> [(i, CType, Initializer i)]
 -- parseTopLevelDeclaration (Declaration ) =error "" 
@@ -319,7 +358,7 @@ makeLenses ''CanonicalNumeric
 
 --collectDeclSpecifiers :: (Error String :> es) => [DeclarationSpecifiers i] -> Eff es ()
 -- TODO: implement warnings 
-extractDeclSpecifiers :: (Error String :> es) => [Located (DeclarationSpecifiers i)] -> Eff es (Maybe (Located StorageClassSpecifier), CType, TypeQualifiers, Maybe (Located FunctionSpecifier))
+extractDeclSpecifiers :: (State SymbolTable :> es, Error String :> es) => [DeclarationSpecifier Text] -> Eff es (Maybe (Located StorageClassSpecifier), CType, TypeQualifiers, Maybe (Located FunctionSpecifier))
 extractDeclSpecifiers specs = 
         (,,,) 
             <$> atMostOne storSpcs 
@@ -332,28 +371,79 @@ extractDeclSpecifiers specs =
         atMostOne _ = throwError "too many values provided"
 
         interpretTypQuals :: [Located TypeQualifier] -> Eff es TypeQualifiers
-        interpretTypQuals = pure . foldMap (qualToQualifiers . (\(L _ x) -> x))
+        interpretTypQuals = pure . foldMap (qualToQualifiers . getInner)
 
         (storSpcs, typSpcs, typQuals, funcSpecs) = (\(a,b,c,d) -> (reverse a, reverse b, reverse c, reverse d)) $ foldl' declSpecSplitter ([], [], [], []) specs
-        declSpecSplitter (a,b,c,d) (L s x) = case x of
-            DSStorageSpec storageClassSpec -> (L s storageClassSpec:a,b,c,d)
-            DSTypeSpec typeSpec -> (a, L s typeSpec:b, c, d) 
-            DSTypeQual typeQual -> (a,b,L s typeQual:c,d)
-            DSFuncSpec funcSpec -> (a,b,c,L s funcSpec:d)
+        declSpecSplitter (a,b,c,d) x = case x of
+            DSStorageSpec s storageClassSpec -> (L s storageClassSpec:a,b,c,d)
+            DSTypeSpec typeSpec -> (a, typeSpec:b, c, d) 
+            DSTypeQual s typeQual -> (a,b,L s typeQual:c,d)
+            DSFuncSpec s funcSpec -> (a,b,c,L s funcSpec:d)
 
 
+parseStructDeclarations :: (State SymbolTable :> es, Error String :> es) => [StructDeclaration Text] -> Eff es [(Text, TypeQualifiers, CType, Maybe Int)] 
+parseStructDeclarations = foldM (\f s -> (++f) <$> parseStructDeclaration s) [] 
+
+
+--evaluateConstantExpr :: (State SymbolTable :> es, Error String :> es) => Expr i -> Eff es Constant
+evaluateConstantExpr (EConstant _ c) = pure c
+evaluateConstantExpr _expr = error ""
+
+parseStructDeclaration :: (State SymbolTable :> es, Error String :> es) => StructDeclaration Text -> Eff es [(Text, TypeQualifiers, CType, Maybe Int)]
+parseStructDeclaration (StructDeclaration spcs sdeclarators) = do
+    let (quals', specs') = partitionEithers spcs
+        (quals,_warns) = foldLocatedQualifiers quals'
+    baseType <- parseTypeSpecifiers specs'
+
+    forM sdeclarators $ \(StructDeclarator declarator sizeExpr) -> do
+        (name, f) <- parseDeclarator declarator
+        size <- mapM evaluateConstantExpr sizeExpr
+        case size of 
+            Just (IntConst i _ _ _) -> pure (name, quals, f baseType, Just $ fromIntegral i)
+            Nothing -> pure (name, quals, f baseType, Nothing)
+            _ -> error "only constant expressions which evaluate to integers can be used to specify bitfields"
+
+parseDataLayoutSpec :: (State SymbolTable :> es, Error String :> es) => DataLayoutSpec Text -> Eff es CType
+parseDataLayoutSpec (StructDef _ss (Just (L sn name)) fields) = do 
+    -- define the struct name as an incomplete struct
+    --tag <- defineIncompleteStructTag name
+    tag <- defineIncompleteStruct name sn
+    -- parse the field declarations
+    decls <- parseStructDeclarations fields
+    -- redefine the struct 
+    --defineStruct tag decls
+    replaceStructDefinition tag decls
+    pure $ StructTy $ CStruct decls
+parseDataLayoutSpec (StructDef _s Nothing fields) = do
+    StructTy . CStruct  <$> parseStructDeclarations fields
+parseDataLayoutSpec (StructRef s name) = do 
+    --getType
+    error ""
+parseDataLayoutSpec (UnionDef s name fields) = do 
+    error ""
+parseDataLayoutSpec (UnionRef s name) = do 
+    error ""
 
 
 -- simple parse
-parseTypeSpecifiers :: (Error String :> es) => [Located (TypeSpecifier i)] -> Eff es CType
+parseTypeSpecifiers :: (State SymbolTable :> es, Error String :> es) => [TypeSpecifier Text] -> Eff es CType
 parseTypeSpecifiers spcs = do
     case spcs of
-        [] -> throwError ""
-        (L s (IdentType x):xs) -> error "identifier types are unimplemented"
-        (L s (StructType x):xs) -> error "struct types are unimplemented"
-        (L s (EnumType x):xs) -> error "enums are unimplemented"
-        (L s (PrimType PVoid):xs) -> pure $ PrimTy CVoid
-        (L s (PrimType PuBool):xs) -> pure $ PrimTy CBool
+        [] -> throwError "no type specifiers supplied"
+        [IdentType (L _ name)] -> do
+            getOrdinaryId name >>= \case
+                Just (TypeAlias  tid) -> getTypeFromId tid
+                Just (Variable   _vid) -> throwError "variable names are not allowed in type specifiers"
+                Just (FunctionID _fid) -> throwError "function names are not allowed in type specifiers"
+                Nothing -> throwError "Type is undefined"
+
+        (IdentType (L _ _):_) -> error "identifier types cannot be followed by more type specifiers"
+        [StructType spec] -> do
+            parseDataLayoutSpec spec
+        (StructType x:xs) -> error "struct types cannot be followed by more type specifiers"
+        (EnumType x:xs) -> error "enums are unimplemented"
+        (PrimType (L s PVoid):xs) -> pure $ PrimTy CVoid
+        (PrimType (L s PuBool):xs) -> pure $ PrimTy CBool
         -- if its none of these then it must be a numeric type
         _ -> canonicalizeNumeric spcs >>= canonicalNumericToCType
 
@@ -362,17 +452,10 @@ parseTypeSpecifiers spcs = do
 
 
 
-canonicalizeNumeric :: (Error String :> es) => [Located (TypeSpecifier i)] -> Eff es CanonicalNumeric
-canonicalizeNumeric = foldlM canonicalizeNumeric' (CanonicalNumeric Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing)
 
 canonicalNumericToCType :: Error String :> es => CanonicalNumeric -> Eff es CType
 canonicalNumericToCType cn --CanonicalNumeric{cnSignedness,cnInt,cnChar,cnShort,cnLongs,cnFloat,cnDouble,cnComplex,cnImaginary} 
     | isJust (cn^.cnDouble) || isJust (cn^.cnFloat) = do
-        -- when (isJust cnSignedness) $ throwError ""
-        -- when (isJust cnInt) $ throwError ""
-        -- when (isJust cnShort) $ throwError ""
-        -- when (isJust cnChar) $ throwError ""
-        -- when (length cnLongs >= 2) $ throwError "" 
         let complex = isJust (cn^.cnComplex)
         PrimTy <$> case (cn^.cnFloat, cn^.cnDouble, cn^.cnLongs) of
             (Just _floatSpan, Nothing, Nothing) -> pure $ CFloat complex
@@ -395,8 +478,11 @@ canonicalNumericToCType cn --CanonicalNumeric{cnSignedness,cnInt,cnChar,cnShort,
             (_, Nothing,Nothing,Just (Right (_longSpan1,_longSpan2 ))) -> pure  $ CLongLongInt sign
             _ -> error "invalid int type"
 
-canonicalizeNumeric' :: (Error String :> es) => CanonicalNumeric -> Located (TypeSpecifier i) -> Eff es CanonicalNumeric
-canonicalizeNumeric' cn (L primSpan tok) = let 
+canonicalizeNumeric :: (Error String :> es) => [TypeSpecifier i] -> Eff es CanonicalNumeric
+canonicalizeNumeric = foldlM canonicalizeNumeric' (CanonicalNumeric Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing)
+
+canonicalizeNumeric' :: (Error String :> es) => CanonicalNumeric -> TypeSpecifier i -> Eff es CanonicalNumeric
+canonicalizeNumeric' cn tok = let 
     repeatError :: (Show a, Error String :> es) => Getting (Maybe a) b (Maybe a) -> b -> Eff es ()
     repeatError getter c = case c^.getter of
         Nothing -> pure ()
@@ -418,8 +504,8 @@ canonicalizeNumeric' cn (L primSpan tok) = let
         when (isJust (c^.cnComplex)) $ throwError ""
         when (length (c^.cnLongs) >= 2) $ throwError "" 
     
-    getConstraints :: Error String :> es => PrimitiveTypes -> Eff es CanonicalNumeric
-    getConstraints = \case
+    getConstraints :: Error String :> es => Located PrimitiveTypes -> Eff es CanonicalNumeric
+    getConstraints (L primSpan x) = case x of
         PVoid -> throwError "cannot have `void` in numeric type"
         PuBool -> throwError "Cannot have `_Bool` in numeric type"
 
@@ -507,63 +593,151 @@ canonicalizeNumeric' cn (L primSpan tok) = let
     typedef name
 -}
 
-
-{-
-parseTypeName :: (Error String :> es) => TypeName i -> Eff es CType
+parseTypeName :: (State SymbolTable :> es, Error String :> es) => TypeName Text -> Eff es CType
 parseTypeName (TypeName specquals absdecl) = do
     let (quals', specs') = partitionEithers specquals
-        quals = foldQualifiers quals'
+        (quals,warns) = foldLocatedQualifiers quals'
+    -- typ <- parseTypeSpecifiers specs'
+    -- case absdecl of
+    --     Just x -> ($ typ) <$> para absDeclAlg x
+    --     Nothing -> pure typ
     typ <- parseTypeSpecifiers specs'
-
     case absdecl of
-        Just x -> do
-            q <- para absDeclAlg x
-            pure (q typ)
+        Just x -> ($ typ) <$> para absDeclAlg x
         Nothing -> pure typ
 
--- parseFunctionDefinition :: [DeclarationSpecifiers i] -> Declarator i -> Maybe [Declaration i] -> Eff es (i, CType, [(i, CType)], Bool)
-parseFunctionDefinition :: FunctionDefinition i -> Eff es (i, CType, [(i, CType)], Bool)
-parseFunctionDefinition (FunctionDefinition specifiers declarator arguments body) = error ""
 
-parseDeclaration :: (Error String :> es, State ParserState :> es) => Declaration Identifier -> Eff es [(VariableID, CType, Maybe (Initializer i))]
+
+
+
+
+{-
+steps:
+1. rename variables and resolve scope.
+    - Function definitions will be collected into a function definition map which maps the functions ID to its name, type, metadata, and a compound statement (if its not a prototype)
+    -
+
+-}
+defineExternDecl :: (State SymbolTable :> es, Error String :> es) => ExternDecl Text -> Eff es ()
+defineExternDecl (EDecl decl) = error ""
+defineExternDecl (EFunctionDef decl) = error ""
+
+
+-- parseFunctionDefinition :: [DeclarationSpecifiers i] -> Declarator i -> Maybe [Declaration i] -> Eff es (i, CType, [(i, CType)], Bool)
+parseFunctionDefinition :: (State SymbolTable :> es, Error String :> es) => FunctionDefinition Text -> Eff es (VariableID, CType, [(VariableID, CType)], Bool)
+parseFunctionDefinition (FunctionDefinition specifiers declarator arguments body) = do
+    (storageSpecs,baseType,qualifiers,funcSpecs) <- extractDeclSpecifiers specifiers
+
+    when (isJust storageSpecs) $ throwError "functions cannot have storage specifiers"
+
+    (_name, tyModif) <- parseDeclarator declarator
+    let _returnType = tyModif baseType
+    _args <- case arguments of
+        Just args -> mapM parseDeclaration args
+        Nothing -> pure []
+    enterScope
+    _res <- parseCompoundStatement body
+    exitScope
+    error ""
+
+parseCompoundStatement :: (State SymbolTable :> es, Error String :> es) => CompoundStatement Text -> Eff es [Statement VariableID]
+parseCompoundStatement (CompoundStatement stmts) = do
+    foldM (\s -> fmap (++s) . parseBlockItem) [] stmts
+
+{-
+Should I delete declarations and lift them 
+-}
+parseBlockItem :: (State SymbolTable :> es, Error String :> es) => BlockItem Text -> Eff es [Statement VariableID]
+parseBlockItem (BDecl decl) = do
+    decls <- parseDeclaration decl
+    pure $ error ""
+parseBlockItem (BStmt stmt) = parseStatement stmt
+
+parseStatement :: (State SymbolTable :> es, Error String :> es) => Statement Text -> Eff es [Statement VariableID]
+parseStatement (CompoundStmt stmts) = pure []
+parseStatement (ExpressionStmt expr) = pure []
+parseStatement (IfStmt selector ifStmt elseStmt) = pure []
+parseStatement s@(ReturnStmt _) = pure []
+
+parseStatement (WhileStmt _cond _body) = do
+    throwError "while statements aren't implemeted"
+parseStatement (DoStmt _body _cond) = do
+    throwError "do while statements aren't implemeted"
+parseStatement (ForStmt _initi _cond _update _body) = do
+    throwError "for statements aren't implemeted"
+parseStatement (ForDeclStmt _initi _cond _update _body) = do
+    throwError "for statements aren't implemeted"
+parseStatement ContinueStmt = do
+    throwError "continue statements aren't implemeted"
+parseStatement BreakStmt = do
+    throwError "break statements aren't implemeted"
+
+parseStatement (LabeledStmt _lbl _stmt) = do
+    throwError "goto statements are unimplemented and evil"
+parseStatement (GotoStmt _lbl) = do
+    throwError "goto statements are unimplemented and evil"
+
+parseStatement (SwitchStmt _selector _body) = do
+    throwError "switch statements aren't implemented"
+parseStatement (CaseStmt _expr _stmt) = do
+    throwError "switch statements aren't implemented"
+parseStatement (DefaultStmt _stmt) = do
+    throwError "switch statements aren't implemented"
+
+
+
+
+
+parseDeclaration :: (Error String :> es, State SymbolTable :> es) => Declaration Identifier -> Eff es [(VariableID, CType, Maybe (Initializer Text))]
 parseDeclaration (Declaration specifiers initDecls) = do
-        (storageClass, typeSpcs, quals, funcSpec) <- extractDeclSpecifiers specifiers
+        (storageClass, baseTy, quals, funcSpec) <- extractDeclSpecifiers specifiers
 
         --tspc <- parseTypeSpecifiers typeSpcs
-        
         case storageClass of
-            Just SCTypedef -> mapM_ (\(InitDeclaration decl init') -> do
-                    when (isJust init') (throwError "")
+            Just (L _ SCTypedef) -> mapM_ (\(InitDeclaration decl init') -> do
+                    when (isJust init') (throwError "cannot have initializers in a type definition")
                     (i, typf) <- parseDeclarator decl
-                    tid <- defineTypeAlias i (error "")
+                    tid <- defineTypeAlias i (typf baseTy)
                     pure ()
                 ) initDecls $> []
             _ -> do
                 mapM (\(InitDeclaration decl init') -> do
-                        (i',c) <- parseDeclarator decl
-                        vid <- defineIdentifier i' (error "")
-                        pure (vid, c, init') 
+                        (i',typf) <- parseDeclarator decl
+                        vid <- defineIdentifier i' VariableDef --(typf baseTy)
+                        pure (vid, typf baseTy, init') 
                         --pure (oid, c tspc, init') 
-                    ) initDecls $> []
+                    ) initDecls
 
 
-parseDeclarator :: (Error String :> es, State ParserState :> es) => Declarator i -> Eff es (i, CType -> CType)
+parseDeclarator :: (Error String :> es, State SymbolTable :> es) => Declarator i -> Eff es (i, CType -> CType)
 parseDeclarator = cata declAlg
 
-declAlg :: (State ParserState :> es, Error String :> es) => DeclaratorF i (Eff es (i, CType -> CType)) -> Eff es (i, CType -> CType)
+declAlg :: (State SymbolTable :> es, Error String :> es) => DeclaratorF i (Eff es (i, CType -> CType)) -> Eff es (i, CType -> CType)
 declAlg (DDIdentF i) = pure (i, id)
-declAlg (DDPointerF quals inner) = inner <&> fmap (\ic -> PointerTy (foldQualifiers quals) . ic )
+declAlg (DDPointerF quals inner) = do
+    i <- inner
+    let (qs,_warns) = foldLocatedQualifiers quals
+    pure $ (\ic -> PointerTy qs . ic) <$> i
 declAlg (DDArrF inner isStatic quals size _) = throwError "havent implemented arr declarators yet"
 -- inner <&> \(i,ic) -> (i,ic)
-declAlg (DDFuncPListF inner params) = do
+declAlg (DDFuncPListF inner params) = error "unimplemented" {-do
     (i,ic) <- inner
     params' <- parseParamDecls params
     let params'' = map snd params'
-    pure (i, \c ->  FuncTy (CFunc (ic c) params'' False)) 
-
+    pure (i, \c ->  FuncTy (CFunc (ic c) params'' False)) -}
 declAlg (DDFuncIListF _ _) =  throwError "cannot have an identifier list in a declarator"
 
 
+absDeclAlg :: (Error String :> es) => AbstractDeclaratorF i (AbstractDeclarator i, Eff es (CType -> CType)) -> Eff es (CType -> CType)
+absDeclAlg (ADPtrF quals Nothing) = pure $ PointerTy (foldQualifiers $ error "") --quals)
+absDeclAlg (ADPtrF quals (Just (_, inner))) = inner <&> \ic -> PointerTy (foldQualifiers $ error "") . ic--quals) . ic 
+absDeclAlg (ArrayF _ _) = error ""
+absDeclAlg (VarArrayF _) = error ""
+absDeclAlg (ParensF _ _) = error ""
+
+
+
+{-
 parseParamDecls :: (State ParserState :> es, Error String :> es) => [ParameterDeclaration i] -> Eff es [(Maybe i, CType)]
 parseParamDecls = mapM parseParamDecl
 
@@ -600,12 +774,26 @@ parseParamDecl (AbsParameterDeclaration specquals Nothing) = do
 parseParamDecl VariadicDeclaration = error ""
 
 
-
-absDeclAlg :: (Error String :> es) => AbstractDeclaratorF i (AbstractDeclarator i, Eff es (CType -> CType)) -> Eff es (CType -> CType)
-absDeclAlg (ADPtrF quals Nothing) = pure $ PointerTy (foldQualifiers quals)
-absDeclAlg (ADPtrF quals (Just (_, inner))) = inner <&> \ic -> PointerTy (foldQualifiers quals) . ic 
-absDeclAlg (ArrayF _ _) = error ""
-absDeclAlg (VarArrayF _) = error ""
-absDeclAlg (ParensF _ _) = error ""
-
  -}
+
+
+runSymbolTable :: (IOE :> es) => Eff es (TranslationUnit Text) -> Eff es ()
+runSymbolTable i = do
+    ii <- i
+    x <- runError $ runState emptySymbolTable $ runSymbolTable' ii
+    case x of
+        Left err -> liftIO $ print err
+        Right (val,tbl) -> liftIO $ print val
+            
+
+runSymbolTable' :: (IOE :> es, Error String :> es, State SymbolTable :> es) => TranslationUnit Text -> Eff es ()
+runSymbolTable' [] = pure ()
+runSymbolTable' (EDecl d:xs) = do
+    u <- parseDeclaration d
+    liftIO $ print u
+    runSymbolTable' xs
+runSymbolTable' (EFunctionDef d:xs) = do
+    u <- parseFunctionDefinition d
+    liftIO $ print u
+    runSymbolTable' xs
+    error ""

@@ -1,4 +1,4 @@
-module Compiler.Parser.SrcLoc (SrcLoc (..), UnhelpfulSpanReason (..), SrcSpan (..), GenLocated (..), Located) where
+module Compiler.Parser.SrcLoc (SrcLoc (..), UnhelpfulSpanReason (..), SrcSpan (..), GenLocated (..), Located, getSpan, getInner) where
 
 import qualified Data.Text as T
 
@@ -52,6 +52,13 @@ instance Monoid SrcSpan where
     mempty = UnhelpfulSpan UnhelpfulGenerated
 
 
+getSpan :: GenLocated a b -> a
+getSpan (L s _) = s
+
+
+-- bad name
+getInner :: GenLocated a b -> b
+getInner (L _ a) = a
 
 -- I just took this from GHC because it seems like a better way to do it
 data GenLocated l e = L l e

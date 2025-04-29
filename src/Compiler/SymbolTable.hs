@@ -1,17 +1,52 @@
 module Compiler.SymbolTable  where
 
-import Compiler.Parser
+--import Compiler.Parser
 
 import Compiler.Types
-import Data.List.NonEmpty ( NonEmpty(..), (<|) )
+import Compiler.Parser.ParseTree
+--import Data.List.NonEmpty ( NonEmpty(..), (<|) )
 --import Data.List.NonEmpty qualified as N
-import Data.List (uncons)
+--import Data.List (uncons)
 import Data.Map qualified as M
-import Data.Set qualified as S
-import Data.Maybe
-import Data.Text qualified as T
-import Effectful
-import Effectful.State.Static.Local
+-- import Data.Set qualified as S
+-- import Data.Maybe
+-- import Data.Text qualified as T
+-- import Effectful
+-- import Effectful.State.Static.Local
+-- import Data.Fix
+
+
+
+
+data TypeSymTbl = TypeSymTbl {
+    types :: M.Map Int (CTypeF Int),
+    fresh :: !Int
+}
+
+fix' :: (a -> a) -> a
+fix' f = let x = f x in x
+
+defineType :: TypeSymTbl -> TypeName i -> Maybe (Int, TypeSymTbl)
+defineType (TypeSymTbl{types=typesMap,fresh=fresh}) (TypeName specquals dec)  = error ""
+    where
+        --this = fix $ defineTypeInner
+        newM = M.insert thisId theType typesMap
+
+        theType = case dec of
+            Just (ADPtr quals inner) -> error ""
+            Just (Array quals inner) -> error ""
+            Just (VarArray inner) -> error ""
+            Just (Parens quals inner) -> error ""
+            Nothing -> error ""
+        
+
+        thisId = fresh
+        nextId = fresh+1
+
+-- this table has the type already defined inside it
+defineTypeInner :: M.Map Int (CTypeF Int) -> TypeName i -> Either () (Int, M.Map Int (CTypeF Int))
+defineTypeInner tbl ty = error ""
+
 
 {-
 
@@ -125,3 +160,4 @@ isType ident (SymbolTable {scope = ((map,_):|_)}) = case M.lookup ident map of
 -- exitFunctionScope :: SymbolTable -> SymbolTable
 -- exitFunctionScope = error ""
 -}
+

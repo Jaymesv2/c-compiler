@@ -25,7 +25,7 @@ data Token
   = Ident Identifier -- T.Text
   | TTypeName Identifier
   | TEnumConst Identifier
-  | StringLiteral T.Text
+  -- | StringLiteral T.Text
   | Constant Constant
   | Punctuator Punctuator
   | Keyword Keyword
@@ -51,6 +51,7 @@ data Constant
   | FloatConst (Integer, Integer) (Maybe (Sign, Integer)) FloatSize
   | EnumConst Identifier
   | CharConst T.Text
+  | StringLiteral T.Text
   deriving stock (Eq, Show)
 
 -- page 55

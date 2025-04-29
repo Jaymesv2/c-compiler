@@ -3,10 +3,11 @@ module Compiler.Types where
 
 import Compiler.Parser
 import Compiler.Parser.Tokens ()
-import Data.Text.Internal.Fusion.Types (RS(RS0))
-
+import Compiler.Parser.SrcLoc
 import Data.Map qualified as M
 import Data.Set qualified as S
+
+import Data.Fix
 
 import GHC.Exts
 
@@ -111,17 +112,14 @@ Abstract declarators only specify a type name, no identifiers.
 -- nextUnique (MkUniqueGen i) = (MkUnique i, MkUniqueGen (i+1))
 
 
-newtype VariableID = MkVariable Int deriving stock (Eq, Show, Ord)
 
 -- nextVariableID :: UniqueGen -> (VariableID, UniqueGen)
 -- nextVariableID (MkUniqueGen i) = (MkVariable . MkUnique $ i, MkUniqueGen (i+1))
 
-newtype TypeID = MkType Int deriving stock (Eq, Show, Ord)
 
 -- nextTypeID :: UniqueGen -> (TypeID, UniqueGen)
 -- nextTypeID (MkUniqueGen i) = (MkType . MkUnique $ i, MkUniqueGen (i+1))
 
-newtype TagID = MkData Int deriving stock (Eq, Show, Ord)
 
 
 
@@ -192,6 +190,36 @@ data CPrimitive
     deriving stock (Eq, Show)
 
 
+{-
+Types need to be in normal form, 
+
+-}
+
+type CStructMD = (Identifier, SrcSpan)
+type CFieldMD = (Identifier, SrcSpan, CStructMD)
+
+data CTypeF f
+    = PrimTyF CPrimitive
+    | ArrayTyF f (Maybe Int)
+    | StructTyF (CStructF f)
+    | UnionTyF (CUnionF f)
+    | FuncTyF (CFuncF f)
+    | PointerTyF TypeQualifiers (CTypeF f)
+    deriving stock (Eq, Show, Functor)
+
+data CFuncF f = CFuncF (CTypeF f)  [CTypeF f] Bool
+    deriving stock (Eq, Show, Functor)
+
+type CFieldF f = [(Identifier, SrcSpan, TypeQualifiers, CTypeF f, Maybe Int)]
+
+newtype CStructF f = CStructF [CFieldF f]
+    deriving stock (Eq, Show, Functor)
+
+newtype CUnionF f = CUnionF [CFieldF f]
+    deriving stock (Eq, Show, Functor)
+
+type CTypeR = Fix CTypeF
+
 data CType
     = PrimTy CPrimitive
     | ArrayTy CType (Maybe Int)
@@ -199,17 +227,18 @@ data CType
     | UnionTy CUnion
     | FuncTy CFunc
     | PointerTy TypeQualifiers CType
-    | TypeRef TypeID
     deriving stock (Eq, Show)
 
+-- Return type, concrete argument types, variadic
 data CFunc = CFunc CType [CType] Bool
     deriving stock (Eq, Show)
 
 
-newtype CStruct = CStruct [(CType, Identifier, Maybe Int)]
+
+newtype CStruct = CStruct [(Identifier, TypeQualifiers, CType, Maybe Int)]
     deriving stock (Eq, Show)
 
-newtype CUnion = CUnion [(CType, Identifier, Maybe Int)]
+newtype CUnion = CUnion [(CType, TypeQualifiers, Identifier, Maybe Int)]
     deriving stock (Eq, Show)
 
 isCompatible :: CType -> CType -> Bool
@@ -220,6 +249,10 @@ isComplete _ = error ""
 
 isIncomplete :: CType -> Bool
 isIncomplete = not . isComplete
+
+
+
+
 
 
 

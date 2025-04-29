@@ -1,9 +1,10 @@
 {-# LANGUAGE TemplateHaskell #-}
 
 module Compiler.Parser.ParseTree where
-
+import Compiler.Parser.SrcLoc (Located, SrcSpan)
 import Compiler.Parser.Tokens
 import Compiler.Parser
+
 
 import Data.Functor.Foldable.TH
 
@@ -50,9 +51,8 @@ data AssignmentOp = ATimesAssign | ADivAssign | AModAssign | APlusAssign | AMinu
 
 
 data Expr i
-    = EIdent i
-    | EConstant Constant
-    | EStringLiteral T.Text -- should be merged with constants
+    = EIdent SrcSpan i
+    | EConstant SrcSpan Constant
     | Bracketed (Expr i) (Expr i)
     | Called (Expr i) [Expr i]
     | DotE (Expr i) Identifier
@@ -73,15 +73,15 @@ data Expr i
 -- must have at least one type specifier,
 -- page 97
 
-data Declaration i = Declaration [DeclarationSpecifiers i] [InitDeclaration i]
+data Declaration i = Declaration [DeclarationSpecifier i] [InitDeclaration i]
     deriving stock (Eq, Show, Functor, Foldable, Traversable) 
 
 -- This can probably be changed to an enum that just combines each of the specifiers and qualifiers and a nonempty list can be used in the above declaration
-data DeclarationSpecifiers i
-    = DSStorageSpec StorageClassSpecifier
+data DeclarationSpecifier i
+    = DSStorageSpec SrcSpan StorageClassSpecifier
     | DSTypeSpec (TypeSpecifier i)
-    | DSTypeQual TypeQualifier
-    | DSFuncSpec FunctionSpecifier
+    | DSTypeQual SrcSpan TypeQualifier
+    | DSFuncSpec SrcSpan FunctionSpecifier
     deriving stock (Eq, Show, Functor, Foldable, Traversable) 
 
 data InitDeclaration   i = InitDeclaration (Declarator   i) (Maybe (Initializer   i)) 
@@ -91,23 +91,23 @@ data InitDeclaration   i = InitDeclaration (Declarator   i) (Maybe (Initializer 
 
 data Declarator i
     = DDIdent i
-    | DDPointer [TypeQualifier] (Declarator i)
-    | DDArr (Declarator i) Bool [TypeQualifier] (Maybe (Expr i)) Bool
+    | DDPointer [Located TypeQualifier] (Declarator i)
+    | DDArr (Declarator i) Bool [Located TypeQualifier] (Maybe (Expr i)) Bool
     | DDFuncPList (Declarator i) [ParameterDeclaration i]
     | DDFuncIList (Declarator i) [i]
     deriving stock (Eq, Show, Functor, Foldable, Traversable) 
 
 
--- needs to be updated
+-- needs to be updat ffed
 -- page 101
--- data DataLayoutSpec = DataLayoutSpec StructOrUnion (Maybe Identifier) (Maybe [StructDeclaration])
+-- data DataLayoutSpec = DataLayoutSpec StructOrUnion (Maybe Identifier) (Maybe [StructDeclaration]) 
 --     deriving stock (Eq, Show)
 
 data DataLayoutSpec i
-    = StructDef (Maybe i) [StructDeclaration i]
-    | StructRef i
-    | UnionDef (Maybe i) [StructDeclaration i]
-    | UnionRef i
+    = StructDef SrcSpan (Maybe (Located i)) [StructDeclaration i]
+    | StructRef SrcSpan (Located i)
+    | UnionDef SrcSpan (Maybe (Located i)) [StructDeclaration i]
+    | UnionRef SrcSpan (Located i)
     deriving stock (Eq, Show, Functor, Foldable, Traversable) 
 
 data StructOrUnion = SUStruct | SUUnion
@@ -116,24 +116,24 @@ data StructOrUnion = SUStruct | SUUnion
 data StructDeclaration i = StructDeclaration [SpecifierQualifier i] [StructDeclarator i]
     deriving stock (Eq, Show, Functor, Foldable, Traversable)
 
-type SpecifierQualifierList t i = [SpecifierQualifier i]
+--type SpecifierQualifierList t i = [SpecifierQualifier i]
 
-type SpecifierQualifier i = Either TypeQualifier (TypeSpecifier i)
+type SpecifierQualifier i = Either (Located TypeQualifier) (TypeSpecifier i)
 
 data StructDeclarator i = StructDeclarator (Declarator i) (Maybe (Expr i)) -- the element and the size
     deriving stock (Eq, Show, Functor, Foldable, Traversable) 
 
 data EnumSpecifier i
-    = EnumSpecifier (Maybe i) [(i, Maybe (Expr i))]
-    | EnumRef Identifier
+    = EnumSpecifier (Maybe (Located i)) [(Located i, Maybe (Expr i))]
+    | EnumRef (Located Identifier)
     deriving stock (Eq, Show, Functor, Foldable, Traversable) 
 
 -- data Pointer = Pointer [TypeQualifier] (Maybe Pointer)
 --     deriving stock (Eq, Show)
 
 data ParameterDeclaration i
-    = ParameterDeclaration [DeclarationSpecifiers i] (Declarator i)
-    | AbsParameterDeclaration [DeclarationSpecifiers i] (Maybe (AbstractDeclarator i))
+    = ParameterDeclaration [DeclarationSpecifier i] (Declarator i)
+    | AbsParameterDeclaration [DeclarationSpecifier i] (Maybe (AbstractDeclarator i))
     | VariadicDeclaration
     deriving stock (Eq, Show, Functor, Foldable, Traversable) 
 
@@ -157,10 +157,10 @@ data PrimitiveTypes
 
 -- page 99
 data TypeSpecifier i
-    = PrimType PrimitiveTypes
+    = PrimType (Located PrimitiveTypes)
     | StructType (DataLayoutSpec i)
     | EnumType (EnumSpecifier i)
-    | IdentType Identifier
+    | IdentType (Located Identifier)
     deriving stock (Eq, Show, Functor, Foldable, Traversable) 
 
 -- page 108
@@ -177,9 +177,8 @@ data StorageClassSpecifier = SCTypedef | SCExtern | SCStatic | SCAuto | SCRegist
 data TypeName i = TypeName [SpecifierQualifier i] (Maybe (AbstractDeclarator i))
     deriving stock (Eq, Show, Functor, Foldable, Traversable) 
 
-
 data AbstractDeclarator i
-    = ADPtr [TypeQualifier] (Maybe (AbstractDeclarator i))
+    = ADPtr [Located TypeQualifier] (Maybe (AbstractDeclarator i))
     | Array (Maybe (AbstractDeclarator i)) (Maybe (Expr i))
     | VarArray (Maybe (AbstractDeclarator i))
     | Parens (Maybe (AbstractDeclarator i)) [ParameterType i]
@@ -234,7 +233,7 @@ type TranslationUnit   i = [ExternDecl   i]
 
 --type ExternDecl i = Either (FunctionDefinition i) (Declaration i)
 
-data FunctionDefinition   i = FunctionDefinition [DeclarationSpecifiers   i] (Declarator   i) (Maybe (DeclarationList   i)) (CompoundStatement   i )
+data FunctionDefinition   i = FunctionDefinition [DeclarationSpecifier i] (Declarator   i) (Maybe (DeclarationList   i)) (CompoundStatement   i )
     deriving stock (Eq, Show, Functor, Foldable, Traversable) 
 
 type DeclarationList   i = [Declaration   i]

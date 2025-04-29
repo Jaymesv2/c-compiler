@@ -274,7 +274,7 @@ ppTokensToTokens f = awaitForever $ \case
       Left _err -> lift $ throwError "failed to parse num constant"
       Right c -> yield (L s $ Constant c)
     L s (PPCharConst c) -> yield (L s $ Constant $ CharConst c)
-    L s (PPStringLiteral st) -> yield (L s $ StringLiteral st) 
+    L s (PPStringLiteral st) -> yield (L s $ Constant $ StringLiteral st) 
     L s (PPPunctuator punct) -> yield (L s $ Punctuator punct) 
     L s (PPIdent ident) -> yield (L s $ f ident) 
     L _ (PPSpecial PPNewline) -> pure ()
